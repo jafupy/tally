@@ -64,8 +64,8 @@
   --muted-text: var(--color-mauve-600);
   --inline-code-bg: var(--color-mauve-100);
   --pre-bg: var(--color-mauve-100);
-  --card-bg: white;
-  --card-border: color-mix(in oklch, var(--heading-text) 12%, transparent);
+  --card-bg: var(--color-mauve-50);
+  --card-border: var(--color-mauve-300);
   --button-bg: var(--color-mauve-100);
   --button-hover-bg: var(--color-mauve-200);
 }
@@ -79,7 +79,7 @@
     --inline-code-bg: var(--color-mauve-800);
     --pre-bg: var(--color-mauve-900);
     --card-bg: var(--color-mauve-900);
-    --card-border: color-mix(in oklch, var(--heading-text) 14%, transparent);
+    --card-border: var(--color-mauve-700);
     --button-bg: var(--color-mauve-800);
     --button-hover-bg: var(--color-mauve-700);
   }
