@@ -12,15 +12,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "arogant"
+name = "argue"
 version = "0.1.0"
+source = "git+https://github.com/jafupy/argue#03c8d09aee25cab187496558804349d459e38a23"
 dependencies = [
- "arogant-macro",
+ "argue-macro",
 ]
 
 [[package]]
-name = "arogant-macro"
+name = "argue-macro"
 version = "0.1.0"
+source = "git+https://github.com/jafupy/argue#03c8d09aee25cab187496558804349d459e38a23"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -235,7 +237,7 @@ dependencies = [
 name = "tally"
 version = "0.1.0"
 dependencies = [
- "arogant",
+ "argue",
  "ignore",
  "memchr",
  "regex",

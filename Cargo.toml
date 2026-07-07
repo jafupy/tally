@@ -5,7 +5,7 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-arogant = { path = "../arogant/crates/arogant" }
+argue = { git = "https://github.com/jafupy/argue" }
 ignore = "0.4"
 memchr = "2"
 regex = { version = "1", default-features = false, features = ["perf", "std"] }

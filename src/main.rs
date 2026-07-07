@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-#[arogant::parser(name = "tally", about = "Count and inspect a codebase")]
+#[argue::parser(name = "tally", about = "Count and inspect a codebase")]
 #[derive(Debug)]
 struct Args {
     /// Include files ignored by gitignore rules.
@@ -69,7 +69,7 @@ fn parse_args() -> Args {
         Ok(args) => args,
         Err(err) => {
             match &err {
-                arogant::Error::Help(help) => println!("{help}"),
+                argue::Error::Help(help) => println!("{help}"),
                 _ => eprintln!("{err}"),
             }
             std::process::exit(err.exit_code());
