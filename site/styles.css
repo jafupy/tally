@@ -251,6 +251,7 @@
   }
 
   .yap :where(pre.tally-preview):not(:where([class~="unyap"] *)) {
+    font-size: min(1rem, calc((100vw - 3rem) / 25));
     font-size: min(1rem, calc((100cqw - 2rem) / 25));
   }
 
