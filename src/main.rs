@@ -21,7 +21,7 @@ struct Args {
     #[flag(short = 'a', long = "all")]
     all: bool,
 
-    /// Number of worker threads. Defaults to up to 4 workers for directories and 1 for a file.
+    /// Number of worker threads. Defaults adaptively to up to 4 workers for directories and 1 for a file.
     #[option(short = 'j', long = "threads")]
     threads: Option<usize>,
 
@@ -38,6 +38,7 @@ fn main() {
     let args = parse_args();
     let path_is_dir = args.path.is_dir();
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
+    let adaptive_threads = args.threads.is_none() && path_is_dir;
     let verbose = args.verbose;
     let sink = file::Sink::new();
     let progress = std::io::stderr().is_terminal().then(|| {
@@ -46,7 +47,14 @@ fn main() {
     });
 
     if path_is_dir {
-        scan_directory(&args.path, Arc::clone(&sink), !args.all, threads, verbose);
+        scan_directory(
+            &args.path,
+            Arc::clone(&sink),
+            !args.all,
+            threads,
+            adaptive_threads,
+            verbose,
+        );
     } else {
         parse_single_file(&args.path, &sink, verbose);
     }
@@ -287,6 +295,6 @@ mod tests {
     fn args_report_help() {
         let err = Args::parse_from(["tally", "--help"]).unwrap_err();
 
-        assert_eq!(err, arogant::Error::Help(Args::HELP));
+        assert_eq!(err, argue::Error::Help(Args::HELP));
     }
 }
