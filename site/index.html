@@ -54,8 +54,9 @@ Total       16  2407   403       6 1998</code></pre>
 
         <h2 id="install">Install it if this is your kind of problem.</h2>
         <p>
-          The installer downloads a prebuilt binary for macOS or Linux, makes it executable, and
-          puts it in <code>~/.local/bin</code>.
+          The installer clones the repository, builds the release binary, copies it into
+          <code>~/.local/bin</code>, and removes the source checkout. If Cargo is missing, it uses
+          a temporary Rust toolchain and deletes that too.
         </p>
         <pre><code>curl -fsSL https://jafupy.com/tally.sh | sh
 tally .</code></pre>

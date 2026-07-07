@@ -1,66 +1,64 @@
 #!/usr/bin/env sh
 set -eu
 
-base_url="${TALLY_BASE_URL:-https://jafupy.com/tally/bin}"
+repo="${TALLY_REPO:-https://github.com/jafupy/tally}"
 install_dir="${TALLY_INSTALL_DIR:-$HOME/.local/bin}"
 bin="$install_dir/tally"
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/tally.XXXXXX")"
+src="$tmpdir/source"
+installed_rust=0
 
 say() {
   printf '%s\n' "$*"
 }
 
-case "$(uname -s)" in
-  Darwin) os="macos" ;;
-  Linux) os="linux" ;;
-  *)
-    say "unsupported OS: $(uname -s)"
+cleanup() {
+  rm -rf "$tmpdir"
+}
+
+trap cleanup EXIT INT TERM
+
+need() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    say "missing required command: $1"
     exit 1
-    ;;
-esac
+  fi
+}
 
-case "$(uname -m)" in
-  arm64 | aarch64)
-    arch="arm64"
-    ;;
-  x86_64 | amd64)
-    if [ "$os" = "macos" ]; then
-      if ! command -v cargo >/dev/null 2>&1; then
-        say "Intel Mac does not have a prebuilt binary yet."
-        say "Install Rust/Cargo, then run:"
-        say "  cargo install --git https://github.com/jafupy/tally --locked --force"
-        exit 1
-      fi
+need git
 
-      say "Intel Mac does not have a prebuilt binary yet; building from source."
-      cargo install --git https://github.com/jafupy/tally --locked --force
-      say "try: tally ."
-      exit 0
-    fi
-    arch="x64"
-    ;;
-  *)
-    say "unsupported CPU: $(uname -m)"
+if ! command -v cargo >/dev/null 2>&1; then
+  if command -v curl >/dev/null 2>&1; then
+    fetch_rustup='curl -fsSL https://sh.rustup.rs'
+  elif command -v wget >/dev/null 2>&1; then
+    fetch_rustup='wget -qO- https://sh.rustup.rs'
+  else
+    say "missing required command: cargo, or curl/wget to install temporary Rust"
     exit 1
-    ;;
-esac
+  fi
 
-artifact="tally-$os-$arch"
-url="$base_url/$artifact"
-tmp="${TMPDIR:-/tmp}/$artifact.$$"
+  installed_rust=1
+  export CARGO_HOME="$tmpdir/cargo"
+  export RUSTUP_HOME="$tmpdir/rustup"
+  export PATH="$CARGO_HOME/bin:$PATH"
 
-mkdir -p "$install_dir"
-
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$url" -o "$tmp"
-elif command -v wget >/dev/null 2>&1; then
-  wget -qO "$tmp" "$url"
-else
-  say "missing required command: curl or wget"
-  exit 1
+  say "installing temporary Rust toolchain"
+  sh -c "$fetch_rustup" | sh -s -- -y --no-modify-path --profile minimal
 fi
 
-chmod 755 "$tmp"
-mv "$tmp" "$bin"
+say "cloning $repo"
+git clone --depth 1 "$repo" "$src"
+
+say "building tally"
+(cd "$src" && cargo build --release --locked)
+
+mkdir -p "$install_dir"
+cp "$src/target/release/tally" "$bin"
+chmod 755 "$bin"
+
+if [ "$installed_rust" -eq 1 ]; then
+  say "removed temporary Rust toolchain"
+fi
 
 say "installed: $bin"
 case ":$PATH:" in
