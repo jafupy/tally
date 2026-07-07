@@ -3,110 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Tally is a fast, over-optimized cloc-style counter for codebases."
-    />
+    <meta http-equiv="refresh" content="0; url=https://jafupy.com/tally/" />
+    <link rel="canonical" href="https://jafupy.com/tally/" />
     <title>Tally</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
-    <style type="text/tailwindcss">
-      @theme {
-        --font-default: "Bricolage Grotesque Variable", sans-serif;
-        --font-sans: "Bricolage Grotesque Variable", sans-serif;
-        --font-serif: "Brygada 1918 Variable", serif;
-        --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
-        --color-old-rose: #cb8b8c;
-      }
-    </style>
-    <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body class="font-sans antialiased">
-    <main class="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-6 py-8 sm:px-8 sm:py-12">
-      <header class="mb-14 flex items-center justify-between gap-6 text-sm">
-        <a class="brand" href="#">Tally</a>
-        <nav>
-          <a href="#install">Install</a>
-          <a href="https://github.com/jafupy/tally">GitHub</a>
-        </nav>
-      </header>
-
-      <section class="yap max-w-none">
-        <h1>An over-optimized cloc clone.</h1>
-        <p>
-          Tally counts files, lines, blanks, comments, and code. It walks a tree, guesses the
-          language, prints a table, and stops.
-        </p>
-
-        <pre class="tally-preview"><code>$ tally .
-Language Files Lines Blank Comment Code
--------- ----- ----- ----- ------- ----
-Rust         6  1235   184       4 1047
-TOML         9   972   146       2  824
-Text         1   200    73       0  127
--------- ----- ----- ----- ------- ----
-Total       16  2407   403       6 1998</code></pre>
-
-        <h2 id="install">Install</h2>
-        <div class="install-card unyap">
-          <div class="install-card-header">
-            <span>Shell</span>
-            <button class="copy-button" type="button" data-copy-install aria-label="Copy install command">
-              <i data-lucide="copy" aria-hidden="true"></i>
-              <span class="copy-label">Copy</span>
-            </button>
-          </div>
-          <pre><code data-install-command>curl -fsSL https://jafupy.github.io/tally/install.sh | sh
-tally .</code></pre>
-        </div>
-
-        <p>
-          Builds from source, installs to <code>~/.local/bin</code>, and removes the temporary
-          checkout.
-        </p>
-        <p><a href="https://github.com/jafupy/tally">Source on GitHub.</a></p>
-      </section>
-
-      <footer class="mt-auto pt-16 text-sm">
-        <p>GPL-3.0-or-later. Counts lines. Tries very hard.</p>
-      </footer>
-    </main>
-    <script>
-      window.addEventListener("DOMContentLoaded", () => {
-        window.lucide?.createIcons();
-
-        const button = document.querySelector("[data-copy-install]");
-        const command = document.querySelector("[data-install-command]");
-        const label = button?.querySelector(".copy-label");
-
-        const copyText = async (text) => {
-          if (navigator.clipboard) {
-            await navigator.clipboard.writeText(text);
-            return;
-          }
-
-          const textarea = document.createElement("textarea");
-          textarea.value = text;
-          textarea.setAttribute("readonly", "");
-          textarea.style.position = "fixed";
-          textarea.style.left = "-9999px";
-          document.body.append(textarea);
-          textarea.select();
-          document.execCommand("copy");
-          textarea.remove();
-        };
-
-        button?.addEventListener("click", async () => {
-          await copyText(command.textContent.trim());
-          label.textContent = "Copied";
-          button.dataset.copied = "true";
-
-          window.setTimeout(() => {
-            label.textContent = "Copy";
-            delete button.dataset.copied;
-          }, 1600);
-        });
-      });
-    </script>
+  <body>
+    <p><a href="https://jafupy.com/tally/">Tally has moved.</a></p>
   </body>
 </html>
