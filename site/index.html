@@ -9,6 +9,7 @@
     />
     <title>Tally</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <style type="text/tailwindcss">
       @theme {
         --font-default: "Bricolage Grotesque Variable", sans-serif;
@@ -47,8 +48,17 @@ Text         1   200    73       0  127
 Total       16  2407   403       6 1998</code></pre>
 
         <h2 id="install">Install</h2>
-        <pre><code>curl -fsSL https://jafupy.github.io/tally/install.sh | sh
+        <div class="install-card unyap">
+          <div class="install-card-header">
+            <span>Shell</span>
+            <button class="copy-button" type="button" data-copy-install aria-label="Copy install command">
+              <i data-lucide="copy" aria-hidden="true"></i>
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
+          <pre><code data-install-command>curl -fsSL https://jafupy.github.io/tally/install.sh | sh
 tally .</code></pre>
+        </div>
 
         <p>
           Builds from source, installs to <code>~/.local/bin</code>, and removes the temporary
@@ -61,5 +71,42 @@ tally .</code></pre>
         <p>GPL-3.0-or-later. Counts lines. Tries very hard.</p>
       </footer>
     </main>
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        window.lucide?.createIcons();
+
+        const button = document.querySelector("[data-copy-install]");
+        const command = document.querySelector("[data-install-command]");
+        const label = button?.querySelector(".copy-label");
+
+        const copyText = async (text) => {
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(text);
+            return;
+          }
+
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.setAttribute("readonly", "");
+          textarea.style.position = "fixed";
+          textarea.style.left = "-9999px";
+          document.body.append(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+        };
+
+        button?.addEventListener("click", async () => {
+          await copyText(command.textContent.trim());
+          label.textContent = "Copied";
+          button.dataset.copied = "true";
+
+          window.setTimeout(() => {
+            label.textContent = "Copy";
+            delete button.dataset.copied;
+          }, 1600);
+        });
+      });
+    </script>
   </body>
 </html>
