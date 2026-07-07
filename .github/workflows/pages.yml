@@ -28,9 +28,6 @@ jobs:
           - artifact: tally-linux-arm64
             runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          - artifact: tally-macos-x64
-            runner: macos-14
-            target: x86_64-apple-darwin
           - artifact: tally-macos-arm64
             runner: macos-14
             target: aarch64-apple-darwin

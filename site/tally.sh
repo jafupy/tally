@@ -19,8 +19,25 @@ case "$(uname -s)" in
 esac
 
 case "$(uname -m)" in
-  arm64 | aarch64) arch="arm64" ;;
-  x86_64 | amd64) arch="x64" ;;
+  arm64 | aarch64)
+    arch="arm64"
+    ;;
+  x86_64 | amd64)
+    if [ "$os" = "macos" ]; then
+      if ! command -v cargo >/dev/null 2>&1; then
+        say "Intel Mac does not have a prebuilt binary yet."
+        say "Install Rust/Cargo, then run:"
+        say "  cargo install --git https://github.com/jafupy/tally --locked --force"
+        exit 1
+      fi
+
+      say "Intel Mac does not have a prebuilt binary yet; building from source."
+      cargo install --git https://github.com/jafupy/tally --locked --force
+      say "try: tally ."
+      exit 0
+    fi
+    arch="x64"
+    ;;
   *)
     say "unsupported CPU: $(uname -m)"
     exit 1
