@@ -58,21 +58,57 @@
   --font-serif: "Brygada 1918 Variable", serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
   --color-old-rose: #cb8b8c;
+  --page-bg: var(--color-mauve-50);
+  --body-text: var(--color-mauve-800);
+  --heading-text: var(--color-mauve-950);
+  --muted-text: var(--color-mauve-600);
+  --inline-code-bg: var(--color-mauve-100);
+  --pre-bg: var(--color-mauve-100);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page-bg: var(--color-mauve-950);
+    --body-text: var(--color-mauve-300);
+    --heading-text: var(--color-mauve-100);
+    --muted-text: var(--color-mauve-400);
+    --inline-code-bg: var(--color-mauve-800);
+    --pre-bg: var(--color-mauve-900);
+  }
 }
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light dark;
     scroll-behavior: smooth;
   }
 
   body {
     min-width: 320px;
     font-family: var(--font-default);
+    background: var(--page-bg);
+    color: var(--body-text);
   }
 
   a {
     text-underline-offset: 2px;
+  }
+
+  nav {
+    display: flex;
+    gap: 1.25rem;
+    color: var(--muted-text);
+  }
+
+  .brand {
+    color: var(--heading-text);
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  footer {
+    color: var(--muted-text);
   }
 }
 
@@ -83,7 +119,7 @@
 
   .yap {
     line-height: 1.7;
-    color: var(--color-mauve-300);
+    color: var(--body-text);
   }
 
   .yap > :where(p, ul, ol, pre, table, blockquote, img):not(:first-child) {
@@ -93,10 +129,10 @@
   .yap :where(h1):not(:where([class~="unyap"] *)),
   :where(.yap\:h1) {
     font-size: clamp(1.65rem, 1.45rem + 0.95vw, 1.934rem);
-    font-family: var(--font-sans);
+    font-family: var(--font-serif);
     font-weight: 600;
     line-height: 1.15;
-    color: var(--color-mauve-100);
+    color: var(--heading-text);
     margin-top: 0.6em;
     margin-bottom: 0.45em;
   }
@@ -104,10 +140,10 @@
   .yap :where(h2):not(:where([class~="unyap"] *)),
   :where(.yap\:h2) {
     font-size: clamp(1.5rem, 1.34rem + 0.75vw, 1.695rem);
-    font-family: var(--font-sans);
+    font-family: var(--font-serif);
     font-weight: 400;
     line-height: 1.2;
-    color: var(--color-mauve-100);
+    color: var(--heading-text);
     margin-top: 0.8em;
     margin-bottom: 0.45em;
   }
@@ -119,10 +155,10 @@
   .yap :where(h3):not(:where([class~="unyap"] *)),
   :where(.yap\:h3) {
     font-size: clamp(1.35rem, 1.22rem + 0.6vw, 1.485rem);
-    font-family: var(--font-sans);
+    font-family: var(--font-serif);
     font-weight: 400;
     line-height: 1.25;
-    color: var(--color-mauve-100);
+    color: var(--heading-text);
     margin-top: 0.8em;
     margin-bottom: 0.45em;
   }
@@ -130,10 +166,10 @@
   .yap :where(h4):not(:where([class~="unyap"] *)),
   :where(.yap\:h4) {
     font-size: clamp(1.2rem, 1.1rem + 0.45vw, 1.302rem);
-    font-family: var(--font-sans);
+    font-family: var(--font-serif);
     font-weight: 600;
     line-height: 1.3;
-    color: var(--color-mauve-100);
+    color: var(--heading-text);
     margin-top: 1.2em;
     margin-bottom: 0.45em;
   }
@@ -141,7 +177,7 @@
   .yap :where(h5):not(:where([class~="unyap"] *)),
   :where(.yap\:h5) {
     font-size: clamp(1.1rem, 1.05rem + 0.2vw, 1.141rem);
-    font-family: var(--font-sans);
+    font-family: var(--font-serif);
     font-weight: 600;
     margin-top: 1.1em;
     margin-bottom: 0.45em;
@@ -150,7 +186,7 @@
   .yap :where(h6):not(:where([class~="unyap"] *)),
   :where(.yap\:h6) {
     font-size: clamp(0.9rem, 0.88rem + 0.15vw, 1rem);
-    font-family: var(--font-sans);
+    font-family: var(--font-serif);
     font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
@@ -182,7 +218,7 @@
   .yap :where(strong):not(:where([class~="unyap"] *)),
   :where(.yap\:bold) {
     font-weight: 600;
-    color: var(--color-mauve-100);
+    color: var(--heading-text);
   }
 
   .yap :where(em):not(:where([class~="unyap"] *)),
@@ -194,7 +230,7 @@
   :where(.yap\:code-inline) {
     font-family: var(--font-mono);
     font-size: 0.875rem;
-    background-color: var(--color-mauve-800);
+    background-color: var(--inline-code-bg);
     padding-inline: 4px;
     padding-block: 2px;
     border-radius: var(--radius-sm);
@@ -204,9 +240,9 @@
   :where(.yap\:pre) {
     font-family: var(--font-mono);
     font-size: 0.875rem;
-    background: var(--color-mauve-900);
+    background: var(--pre-bg);
     border: 1px solid
-      color-mix(in oklch, var(--color-mauve-100) 10%, transparent);
+      color-mix(in oklch, var(--heading-text) 10%, transparent);
     padding: 1rem;
     border-radius: 0.5rem;
     overflow-x: auto;
@@ -259,9 +295,9 @@
   .yap :where(blockquote):not(:where([class~="unyap"] *)),
   :where(.yap\:blockquote) {
     border-left: 1px solid
-      color-mix(in oklch, var(--color-mauve-100) 20%, transparent);
+      color-mix(in oklch, var(--heading-text) 20%, transparent);
     padding-left: 1em;
-    color: var(--color-mauve-400);
+    color: var(--muted-text);
     margin-block: 1.25em;
     font-style: italic;
   }
@@ -270,7 +306,7 @@
   :where(.yap\:hr) {
     border: none;
     border-top: 1px solid
-      color-mix(in oklch, var(--color-mauve-100) 20%, transparent);
+      color-mix(in oklch, var(--heading-text) 20%, transparent);
     margin-block: 2em;
   }
 
@@ -291,14 +327,14 @@
 
   .yap :where(th, td):not(:where([class~="unyap"] *)) {
     border-bottom: 1px solid
-      color-mix(in oklch, var(--color-mauve-100) 20%, transparent);
+      color-mix(in oklch, var(--heading-text) 20%, transparent);
     padding: 0.5rem 0.6rem;
     text-align: left;
   }
 
   .yap :where(th):not(:where([class~="unyap"] *)) {
     font-weight: 600;
-    color: var(--color-mauve-100);
+    color: var(--heading-text);
   }
 
   .yap :where(p + p):not(:where([class~="unyap"] *)) {

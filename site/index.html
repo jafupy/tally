@@ -20,26 +20,20 @@
     </style>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body class="bg-mauve-950 font-sans text-mauve-300 antialiased">
+  <body class="font-sans antialiased">
     <main class="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-6 py-8 sm:px-8 sm:py-12">
       <header class="mb-14 flex items-center justify-between gap-6 text-sm">
-        <a class="text-xl font-semibold text-mauve-100 no-underline" href="#">Tally</a>
-        <nav class="flex items-center gap-5 text-mauve-400">
-          <a class="hover:text-mauve-100" href="#install">Install</a>
-          <a class="hover:text-mauve-100" href="#usage">Usage</a>
-          <a class="hover:text-mauve-100" href="#why">Why</a>
+        <a class="brand" href="#">Tally</a>
+        <nav>
+          <a href="#install">Install</a>
+          <a href="https://github.com/jafupy/tally">GitHub</a>
         </nav>
       </header>
 
       <section class="yap max-w-none">
         <h1>An over-optimized cloc clone.</h1>
         <p>
-          Tally counts files, lines, blanks, comments, and code. It is basically the thing you
-          already know, but written in Rust and tuned because that was more fun than leaving it
-          alone.
-        </p>
-        <p>
-          There is no platform here. No dashboard. No insight engine. It walks a tree, guesses the
+          Tally counts files, lines, blanks, comments, and code. It walks a tree, guesses the
           language, prints a table, and stops.
         </p>
 
@@ -52,38 +46,18 @@ Text         1   200    73       0  127
 -------- ----- ----- ----- ------- ----
 Total       16  2407   403       6 1998</code></pre>
 
-        <h2 id="install">Install it if this is your kind of problem.</h2>
-        <p>
-          The installer clones the repository, builds the release binary, copies it into
-          <code>~/.local/bin</code>, and removes the source checkout. If Cargo is missing, it uses
-          a temporary Rust toolchain and deletes that too.
-        </p>
+        <h2 id="install">Install</h2>
         <pre><code>curl -fsSL https://jafupy.github.io/tally/tally/install.sh | sh
 tally .</code></pre>
 
-        <h2 id="usage">It has about three ideas.</h2>
         <p>
-          By default, Tally respects git ignore rules, uses a small worker pool for directories, and
-          prints one table. The flags are there for the boring cases:
+          Builds from source, installs to <code>~/.local/bin</code>, and removes the temporary
+          checkout.
         </p>
-        <ul>
-          <li><code>--all</code> includes files that gitignore rules would normally hide.</li>
-          <li><code>--threads</code> controls worker count for larger trees.</li>
-          <li><code>--verbose</code> prints extra diagnostics, including unknown file formats.</li>
-        </ul>
-
-        <h2 id="why">Why bother?</h2>
-        <p>
-          Because sometimes you want the shape of a repo without waiting, installing a larger tool,
-          or pretending that a line-count table is strategic analysis.
-        </p>
-        <p>
-          Tally is for terminal people with a mild performance problem. If <code>cloc</code> is
-          already good enough for you, keep using it. That is a reasonable position.
-        </p>
+        <p><a href="https://github.com/jafupy/tally">Source on GitHub.</a></p>
       </section>
 
-      <footer class="mt-auto pt-16 text-sm text-mauve-500">
+      <footer class="mt-auto pt-16 text-sm">
         <p>GPL-3.0-or-later. Counts lines. Tries very hard.</p>
       </footer>
     </main>
