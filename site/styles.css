@@ -118,6 +118,7 @@
   }
 
   .yap {
+    container-type: inline-size;
     line-height: 1.7;
     color: var(--body-text);
   }
@@ -247,6 +248,10 @@
     border-radius: 0.5rem;
     overflow-x: auto;
     margin-block: 1.25em;
+  }
+
+  .yap :where(pre.tally-preview):not(:where([class~="unyap"] *)) {
+    font-size: min(1rem, calc((100cqw - 2rem) / 25));
   }
 
   .yap :where(ul):not(:where([class~="unyap"] *)),
