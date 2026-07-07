@@ -1,0 +1,47 @@
+[[languages]]
+name = "Ada"
+extensions = ["adb", "ads"]
+line_comments = ["--"]
+block_comments = []
+
+[[languages]]
+name = "Awk"
+extensions = ["awk"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Batch"
+extensions = ["bat", "cmd"]
+line_comments = ["REM", "::"]
+block_comments = []
+
+[[languages]]
+name = "COBOL"
+extensions = ["cob", "cbl", "cpy"]
+line_comments = ["*", "/"]
+block_comments = []
+
+[[languages]]
+name = "Fortran"
+extensions = ["f", "for", "f90", "f95", "f03", "f08"]
+line_comments = ["!", "C", "c", "*"]
+block_comments = []
+
+[[languages]]
+name = "Perl"
+extensions = ["pl", "pm", "t"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Tcl"
+extensions = ["tcl"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Vimscript"
+extensions = ["vim"]
+line_comments = ["\""]
+block_comments = []

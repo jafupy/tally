@@ -1,0 +1,35 @@
+[[languages]]
+name = "Diff"
+extensions = ["diff", "patch"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "LaTeX"
+extensions = ["tex", "sty", "cls"]
+line_comments = ["%"]
+block_comments = []
+
+[[languages]]
+name = "Markdown"
+extensions = ["md", "markdown", "mdx"]
+line_comments = []
+block_comments = [["<!--", "-->"]]
+
+[[languages]]
+name = "Rich Text Format"
+extensions = ["rtf"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Text"
+extensions = ["txt", "text", "conl", "version", "gitignore"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "XML"
+extensions = ["xml", "xhtml", "xaml", "svg"]
+line_comments = []
+block_comments = [["<!--", "-->"]]

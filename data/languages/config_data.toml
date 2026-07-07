@@ -1,0 +1,83 @@
+[[languages]]
+name = "BitBake"
+extensions = ["bb", "bbappend", "bbclass", "inc"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "CMake"
+extensions = ["cmake"]
+line_comments = ["#"]
+block_comments = [["#[[", "]]"]]
+
+[[languages]]
+name = "Dockerfile"
+extensions = ["dockerfile"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "GraphQL"
+extensions = ["graphql", "gql"]
+line_comments = ["#"]
+block_comments = [["\"\"\"", "\"\"\""]]
+
+[[languages]]
+name = "HCL"
+extensions = ["hcl", "tf", "tfvars"]
+line_comments = ["#", "//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Inno Setup"
+extensions = ["iss", "isl"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "JSON"
+extensions = ["json", "jsonc", "json5"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Makefile"
+extensions = ["mk", "mak", "make"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Nix"
+extensions = ["nix"]
+line_comments = ["#"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Property List"
+extensions = ["plist", "entitlements", "provisionprofile"]
+line_comments = []
+block_comments = [["<!--", "-->"]]
+
+[[languages]]
+name = "Protocol Buffers"
+extensions = ["proto"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "SQL"
+extensions = ["sql"]
+line_comments = ["--"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "TOML"
+extensions = ["toml"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "YAML"
+extensions = ["yml", "yaml"]
+line_comments = ["#"]
+block_comments = []

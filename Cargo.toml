@@ -1,0 +1,20 @@
+[package]
+name = "tally"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arogant = { path = "../arogant/crates/arogant" }
+ignore = "0.4"
+memchr = "2"
+regex = { version = "1", default-features = false, features = ["perf", "std"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

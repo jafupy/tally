@@ -1,0 +1,167 @@
+[[languages]]
+name = "Bash"
+extensions = ["bash"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "C#"
+extensions = ["cs"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Clojure"
+extensions = ["clj", "cljs", "cljc", "edn"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Dart"
+extensions = ["dart"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Elixir"
+extensions = ["ex", "exs"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Elm"
+extensions = ["elm"]
+line_comments = ["--"]
+block_comments = [["{-", "-}"]]
+
+[[languages]]
+name = "Erlang"
+extensions = ["erl", "hrl"]
+line_comments = ["%"]
+block_comments = []
+
+[[languages]]
+name = "F#"
+extensions = ["fs", "fsi", "fsx"]
+line_comments = ["//"]
+block_comments = [["(*", "*)"]]
+
+[[languages]]
+name = "GDScript"
+extensions = ["gd"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Gleam"
+extensions = ["gleam"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Groovy"
+extensions = ["groovy", "gradle"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Haskell"
+extensions = ["hs", "lhs"]
+line_comments = ["--"]
+block_comments = [["{-", "-}"]]
+
+[[languages]]
+name = "Java"
+extensions = ["java"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Julia"
+extensions = ["jl"]
+line_comments = ["#"]
+block_comments = [["#=", "=#"]]
+
+[[languages]]
+name = "Kotlin"
+extensions = ["kt", "kts"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Lisp"
+extensions = ["lisp", "lsp", "el", "scm", "ss", "rkt"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Lua"
+extensions = ["lua"]
+line_comments = ["--"]
+block_comments = [["--[[", "]]"]]
+
+[[languages]]
+name = "MATLAB"
+extensions = ["m"]
+line_comments = ["%"]
+block_comments = [["%{", "%}"]]
+
+[[languages.disambiguation]]
+regex = "^\\s*function\\b"
+score = 5
+
+[[languages.disambiguation]]
+regex = "^\\s*classdef\\b"
+score = 5
+
+[[languages.disambiguation]]
+regex = "^\\s*%\\{"
+score = 3
+
+[[languages]]
+name = "Nim"
+extensions = ["nim", "nims"]
+line_comments = ["#"]
+block_comments = [["#[", "]#"]]
+
+[[languages]]
+name = "OCaml"
+extensions = ["ml", "mli"]
+line_comments = []
+block_comments = [["(*", "*)"]]
+
+[[languages]]
+name = "PowerShell"
+extensions = ["ps1", "psm1", "psd1"]
+line_comments = ["#"]
+block_comments = [["<#", "#>"]]
+
+[[languages]]
+name = "Python"
+extensions = ["py", "pyw", "pyi"]
+line_comments = ["#"]
+block_comments = [["\"\"\"", "\"\"\""], ["'''", "'''"]]
+
+[[languages]]
+name = "R"
+extensions = ["r"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Ruby"
+extensions = ["rb", "rake", "gemspec"]
+line_comments = ["#"]
+block_comments = [["=begin", "=end"]]
+
+[[languages]]
+name = "Scala"
+extensions = ["scala", "sc"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Shell"
+extensions = ["sh", "zsh", "ksh"]
+line_comments = ["#"]
+block_comments = []

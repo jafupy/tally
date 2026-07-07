@@ -1,0 +1,77 @@
+[[languages]]
+name = "Astro"
+extensions = ["astro"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"], ["<!--", "-->"]]
+
+[[languages]]
+name = "CoffeeScript"
+extensions = ["coffee"]
+line_comments = ["#"]
+block_comments = [["###", "###"]]
+
+[[languages]]
+name = "CSS"
+extensions = ["css"]
+line_comments = []
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Handlebars"
+extensions = ["hbs"]
+line_comments = []
+block_comments = [["{{!", "}}"], ["{{!--", "--}}"]]
+
+[[languages]]
+name = "HTML"
+extensions = ["html", "htm"]
+line_comments = []
+block_comments = [["<!--", "-->"]]
+
+[[languages]]
+name = "JavaScript"
+extensions = ["js", "mjs", "cjs", "jsx"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Less"
+extensions = ["less"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "PHP"
+extensions = ["php", "phtml", "php3", "php4", "php5"]
+line_comments = ["//", "#"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Sass"
+extensions = ["sass"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "SCSS"
+extensions = ["scss"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Svelte"
+extensions = ["svelte"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"], ["<!--", "-->"]]
+
+[[languages]]
+name = "TypeScript"
+extensions = ["ts", "tsx"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Vue"
+extensions = ["vue"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"], ["<!--", "-->"]]

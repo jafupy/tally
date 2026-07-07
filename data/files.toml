@@ -1,0 +1,71 @@
+[[filenames]]
+name = "Dockerfile"
+language = "Dockerfile"
+
+[[filenames]]
+name = "Makefile"
+language = "Makefile"
+
+[[filenames]]
+name = "GNUmakefile"
+language = "Makefile"
+
+[[filenames]]
+name = "CMakeLists.txt"
+language = "CMake"
+
+[[filenames]]
+name = "Cargo.lock"
+language = "TOML"
+
+[[filenames]]
+name = "flake.lock"
+language = "JSON"
+
+[[filenames]]
+name = "uv.lock"
+language = "TOML"
+
+[[filenames]]
+name = "RELEASE_CHANNEL"
+language = "Text"
+
+[[filenames]]
+name = "Procfile"
+language = "Shell"
+
+[[filenames]]
+name = "OFL.txt"
+language = "Text"
+
+[[filename_prefixes]]
+prefix = "Dockerfile"
+language = "Dockerfile"
+
+[[filename_prefixes]]
+prefix = "Procfile"
+language = "Shell"
+
+[[filename_prefixes]]
+prefix = "LICENSE"
+language = "Text"
+
+[[filename_prefixes]]
+prefix = "blame_incremental_"
+language = "Text"
+
+[[filename_suffixes]]
+suffix = "-pattern"
+language = "Text"
+
+[[filename_suffixes]]
+suffix = ".desktop.in"
+language = "Text"
+
+[[filename_suffixes]]
+suffix = ".yaml.in"
+language = "YAML"
+
+[[filename_suffixes]]
+suffix = ".xml.in"
+language = "XML"

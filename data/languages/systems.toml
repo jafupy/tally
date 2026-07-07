@@ -1,0 +1,137 @@
+[[languages]]
+name = "Assembly"
+extensions = ["asm", "s"]
+line_comments = [";", "#"]
+block_comments = []
+
+[[languages]]
+name = "C"
+extensions = ["c", "h"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "C++"
+extensions = ["cc", "cpp", "cxx", "c++", "hh", "hpp", "hxx", "h++", "ipp", "ixx"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "CUDA"
+extensions = ["cu", "cuh"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "D"
+extensions = ["d", "di"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"], ["/+", "+/"]]
+
+[[languages]]
+name = "Go"
+extensions = ["go"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "HLSL"
+extensions = ["hlsl"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Metal"
+extensions = ["metal"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Objective-C"
+extensions = ["m", "mm"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages.disambiguation]]
+regex = "^\\s*#\\s*import\\b"
+score = 5
+
+[[languages.disambiguation]]
+regex = "^\\s*@(?:interface|implementation|protocol|end)\\b"
+score = 5
+
+[[languages.disambiguation]]
+regex = "@autoreleasepool\\b"
+score = 4
+
+[[languages]]
+name = "Rust"
+extensions = ["rs"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Swift"
+extensions = ["swift"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "V"
+extensions = ["v", "vsh"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages.disambiguation]]
+regex = "^\\s*fn\\s+\\w+"
+score = 5
+
+[[languages.disambiguation]]
+regex = "^\\s*(pub\\s+)?struct\\s+\\w+"
+score = 4
+
+[[languages.disambiguation]]
+regex = "^\\s*import\\s+[\\w./]+"
+score = 3
+
+[[languages]]
+name = "Verilog"
+extensions = ["v", "vh", "sv", "svh"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages.disambiguation]]
+regex = "^\\s*endmodule\\b"
+score = 6
+
+[[languages.disambiguation]]
+regex = "^\\s*(always|assign|wire|reg|logic|input|output|inout)\\b"
+score = 4
+
+[[languages.disambiguation]]
+regex = "^\\s*module\\s+\\w+\\s*(#|\\()"
+score = 3
+
+[[languages]]
+name = "WebAssembly Interface Type"
+extensions = ["wit"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "WGSL"
+extensions = ["wgsl"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Windows Resource File"
+extensions = ["rc"]
+line_comments = ["//"]
+block_comments = [["/*", "*/"]]
+
+[[languages]]
+name = "Zig"
+extensions = ["zig", "zon"]
+line_comments = ["//"]
+block_comments = []
