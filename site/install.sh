@@ -55,7 +55,11 @@ else
   exit 1
 fi
 
-url="https://github.com/$repo/releases/download/$version/$asset"
+if [ "$version" = "latest" ]; then
+  url="https://github.com/$repo/releases/latest/download/$asset"
+else
+  url="https://github.com/$repo/releases/download/$version/$asset"
+fi
 
 say "downloading Tally $version for $target"
 fetch "$url" "$tmpdir/$executable"
