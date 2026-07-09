@@ -1,12 +1,11 @@
 #!/usr/bin/env sh
 set -eu
 
-repo="${TALLY_REPO:-https://github.com/jafupy/tally}"
+repo="${TALLY_REPO:-jafupy/tally}"
+version="${TALLY_VERSION:-latest}"
 install_dir="${TALLY_INSTALL_DIR:-$HOME/.local/bin}"
-bin="$install_dir/tally"
+executable="tally"
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/tally.XXXXXX")"
-src="$tmpdir/source"
-installed_rust=0
 
 say() {
   printf '%s\n' "$*"
@@ -18,47 +17,48 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-need() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    say "missing required command: $1"
-    exit 1
-  fi
+unsupported() {
+  say "no prebuilt Tally release is available for $1"
+  say "supported platforms: macOS ARM64 and Linux x86_64"
+  say "build from source instead: https://github.com/$repo#development"
+  exit 1
 }
 
-need git
+case "$(uname -s)" in
+  Darwin)
+    case "$(uname -m)" in
+      arm64 | aarch64) target="aarch64-apple-darwin" ;;
+      *) unsupported "macOS $(uname -m)" ;;
+    esac
+    ;;
+  Linux)
+    case "$(uname -m)" in
+      x86_64 | amd64) target="x86_64-unknown-linux-gnu" ;;
+      *) unsupported "Linux $(uname -m)" ;;
+    esac
+    ;;
+  *) unsupported "$(uname -s) $(uname -m)" ;;
+esac
 
-if ! command -v cargo >/dev/null 2>&1; then
-  if command -v curl >/dev/null 2>&1; then
-    fetch_rustup='curl -fsSL https://sh.rustup.rs'
-  elif command -v wget >/dev/null 2>&1; then
-    fetch_rustup='wget -qO- https://sh.rustup.rs'
-  else
-    say "missing required command: cargo, or curl/wget to install temporary Rust"
-    exit 1
-  fi
-
-  installed_rust=1
-  export CARGO_HOME="$tmpdir/cargo"
-  export RUSTUP_HOME="$tmpdir/rustup"
-  export PATH="$CARGO_HOME/bin:$PATH"
-
-  say "installing temporary Rust toolchain"
-  sh -c "$fetch_rustup" | sh -s -- -y --no-modify-path --profile minimal
+if command -v curl >/dev/null 2>&1; then
+  fetch() { curl -fsSL "$1" -o "$2"; }
+elif command -v wget >/dev/null 2>&1; then
+  fetch() { wget -qO "$2" "$1"; }
+else
+  say "missing required command: curl or wget"
+  exit 1
 fi
 
-say "cloning $repo"
-git clone --depth 1 "$repo" "$src"
+archive="tally-$target.tar.gz"
+url="https://github.com/$repo/releases/download/$version/$archive"
 
-say "building tally"
-(cd "$src" && cargo build --release --locked)
+say "downloading Tally $version for $target"
+fetch "$url" "$tmpdir/$archive"
+tar -xzf "$tmpdir/$archive" -C "$tmpdir"
 
 mkdir -p "$install_dir"
-cp "$src/target/release/tally" "$bin"
-chmod 755 "$bin"
-
-if [ "$installed_rust" -eq 1 ]; then
-  say "removed temporary Rust toolchain"
-fi
+bin="$install_dir/$executable"
+install -m 755 "$tmpdir/$executable" "$bin"
 
 say "installed: $bin"
 case ":$PATH:" in
