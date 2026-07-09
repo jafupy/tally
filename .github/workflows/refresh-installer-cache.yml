@@ -1,6 +1,7 @@
 name: Refresh installer cache
 
 on:
+  workflow_dispatch:
   push:
     branches: [master]
     paths: [site/install.sh]
