@@ -11,7 +11,7 @@ Prebuilt releases are available for macOS on Apple Silicon and Linux x86_64. Oth
 On macOS or Linux, this installs the latest release to `~/.local/bin`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jafupy/tally/main/site/install.sh | sh
+curl -fsSL https://jafupy.com/tally.sh | sh
 ```
 
 The script detects the platform before downloading. Intel Macs, ARM Linux machines, and Windows are asked to build from source.
