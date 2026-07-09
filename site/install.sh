@@ -27,13 +27,19 @@ unsupported() {
 case "$(uname -s)" in
   Darwin)
     case "$(uname -m)" in
-      arm64 | aarch64) target="aarch64-apple-darwin" ;;
+      arm64 | aarch64)
+        target="aarch64-apple-darwin"
+        asset="tally-mac-arm"
+        ;;
       *) unsupported "macOS $(uname -m)" ;;
     esac
     ;;
   Linux)
     case "$(uname -m)" in
-      x86_64 | amd64) target="x86_64-unknown-linux-gnu" ;;
+      x86_64 | amd64)
+        target="x86_64-unknown-linux-gnu"
+        asset="tally-linux-x86_64"
+        ;;
       *) unsupported "Linux $(uname -m)" ;;
     esac
     ;;
@@ -49,12 +55,10 @@ else
   exit 1
 fi
 
-archive="tally-$target.tar.gz"
-url="https://github.com/$repo/releases/download/$version/$archive"
+url="https://github.com/$repo/releases/download/$version/$asset"
 
 say "downloading Tally $version for $target"
-fetch "$url" "$tmpdir/$archive"
-tar -xzf "$tmpdir/$archive" -C "$tmpdir"
+fetch "$url" "$tmpdir/$executable"
 
 mkdir -p "$install_dir"
 bin="$install_dir/$executable"
