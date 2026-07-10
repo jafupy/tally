@@ -23,6 +23,4 @@ tally .
 
 Installs to `~/.local/bin`.
 
-[Source on GitHub.](https://github.com/jafupy/tally)
-
 GPL-3.0-or-later. Counts faster than anyone asked it to.
