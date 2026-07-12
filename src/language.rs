@@ -151,6 +151,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn includes_the_cloc_language_catalog() {
+        assert_eq!(count(), 421);
+    }
+
+    #[test]
     fn detects_exact_filenames() {
         let language_id = detect_path(Path::new("Dockerfile"), None).unwrap();
         assert_eq!(get(language_id).name, "Dockerfile");

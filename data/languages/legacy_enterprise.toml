@@ -1,0 +1,251 @@
+[[languages]]
+name = "ABAP"
+extensions = ["abap"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "APL"
+extensions = ["apl","apla","aplc","aplf","apli","apln","aplo","dyalog","dyapp","mipage"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "AnsProlog"
+extensions = ["lp"]
+line_comments = ["%"]
+block_comments = [["%*","*%"]]
+
+[[languages]]
+name = "CoCoA 5"
+extensions = ["c5","cocoa5","cocoa5server","cpkg5"]
+line_comments = ["//","--"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "DAL"
+extensions = ["da"]
+line_comments = []
+block_comments = [["[","]"]]
+
+[[languages]]
+name = "DIET"
+extensions = ["dt"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "DOORS Extension Language"
+extensions = ["dxl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Fortran 2003"
+extensions = ["F03","f03"]
+line_comments = ["!"]
+block_comments = []
+
+[[languages]]
+name = "Fortran 77"
+extensions = ["F","F77","FOR","FTN","f77","ftn","pfo"]
+line_comments = ["!"]
+block_comments = []
+
+[[languages]]
+name = "Fortran 90"
+extensions = ["F90","f90"]
+line_comments = ["!"]
+block_comments = []
+
+[[languages]]
+name = "Fortran 95"
+extensions = ["F95","f95"]
+line_comments = ["!"]
+block_comments = []
+
+[[languages]]
+name = "Gencat NLS"
+extensions = ["msg"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Harbour"
+extensions = ["hb"]
+line_comments = ["*","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "IDL"
+extensions = ["dlm","idl"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "IPL"
+extensions = ["ipl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Igor Pro"
+extensions = ["ipf"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "JCL"
+extensions = ["jcl"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "LiveLink OScript"
+extensions = ["oscript"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Modelica"
+extensions = ["mo"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Modula3"
+extensions = ["i3","ig","m3","mg"]
+line_comments = ["//"]
+block_comments = [["{","}"],["(*","*)"]]
+
+[[languages]]
+name = "NASTRAN DMAP"
+extensions = ["dmap"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Oracle Forms"
+extensions = ["fmt"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Oracle PL/SQL"
+extensions = ["bdy","bod","fnc","prc","spc","trg"]
+line_comments = ["--","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Oracle Reports"
+extensions = ["rex"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "PL/I"
+extensions = ["pl1"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "PL/M"
+extensions = ["lit","plm"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Pascal"
+extensions = ["dpr","lpr","pas","pascal"]
+line_comments = ["//"]
+block_comments = [["(*","*)"]]
+
+[[languages]]
+name = "Patran Command Language"
+extensions = ["pcl","ses"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "PowerBuilder"
+extensions = ["pbt","sra","srf","srm","srs","sru","srw"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "SAS"
+extensions = ["sas"]
+line_comments = ["//"]
+block_comments = [["*",";"],["/*","*/"]]
+
+[[languages]]
+name = "SKILL"
+extensions = []
+line_comments = [";","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "SKILL++"
+extensions = ["ils"]
+line_comments = [";","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Smalltalk"
+extensions = ["st"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Softbridge Basic"
+extensions = ["SBL","sbl"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Specman e"
+extensions = ["e"]
+line_comments = ["//","--"]
+block_comments = [["^'>","^<'"],["/*","*/"]]
+
+[[languages]]
+name = "Stata"
+extensions = ["DO","ado","do","doh","ihlp","mata","matah","sthlp"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "TLA+"
+extensions = ["tla"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "TNSDL"
+extensions = ["cii","cin","in1","in2","in3","in4","inf","interface","rou","sdl","sdt","spd","ssc","sst"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "TTCN"
+extensions = ["ttcn","ttcn2","ttcn3","ttcnpp"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "VHDL"
+extensions = ["VHD","VHDL","vhd","vhdl","vhf","vhi","vho","vhs","vht","vhw"]
+line_comments = ["--","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "xBase"
+extensions = ["prg","prw"]
+line_comments = ["*","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "xBase Header"
+extensions = ["ch"]
+line_comments = ["*","//"]
+block_comments = [["/*","*/"]]

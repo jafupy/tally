@@ -1,0 +1,179 @@
+[[languages]]
+name = "AMPLE"
+extensions = ["ample","dofile","startup"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "AppleScript"
+extensions = ["applescript"]
+line_comments = ["--"]
+block_comments = [["(*","*)"]]
+
+[[languages]]
+name = "Arturo"
+extensions = ["art"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "AutoHotkey"
+extensions = ["ahk","ahkl"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Bourne Again Shell"
+extensions = ["bash"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Bourne Shell"
+extensions = ["sh"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "C Shell"
+extensions = ["csh","tcsh"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "DOS Batch"
+extensions = ["BAT","BTM","CMD","bat","btm","cmd"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Expect"
+extensions = ["exp"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Fish Shell"
+extensions = ["fish"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Kermit"
+extensions = ["ksc"]
+line_comments = ["#",";"]
+block_comments = []
+
+[[languages]]
+name = "Korn Shell"
+extensions = ["ksh"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Luau"
+extensions = ["luau"]
+line_comments = []
+block_comments = [["--[=====[","]=====]"],["--[====[","]====]"],["--[===[","]===]"],["--[==[","]==]"],["--[=[","]=]"],["--[[","]]"]]
+
+[[languages]]
+name = "MUMPS"
+extensions = ["mps"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Magik"
+extensions = ["magik"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Nushell"
+extensions = ["nu"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Rexx"
+extensions = ["pprx","rexx"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Ring"
+extensions = ["rform","rh","ring"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "SparForte"
+extensions = ["sp"]
+line_comments = ["#","--"]
+block_comments = []
+
+[[languages]]
+name = "Tcl/Tk"
+extensions = ["itk","tcl","tk"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "VBA"
+extensions = ["VBA","vba"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "VBScript"
+extensions = ["VBS","vbs"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Visual Basic"
+extensions = ["BAS","Dsr","FRX","bas","ctl","dsr","frm","frx","vbp","vbw"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Visual Basic .NET"
+extensions = ["VB","VBHTML","vb","vbhtml","vbproj"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Visual Fox Pro"
+extensions = ["SCA","sca"]
+line_comments = ["*"]
+block_comments = []
+
+[[languages]]
+name = "awk"
+extensions = ["auk","awk","gawk","mawk","nawk"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "bc"
+extensions = []
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "sed"
+extensions = ["sed"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "vim script"
+extensions = ["vim"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "zsh"
+extensions = ["zsh"]
+line_comments = ["#"]
+block_comments = []
