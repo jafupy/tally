@@ -38,6 +38,54 @@ language = "Shell"
 name = "OFL.txt"
 language = "Text"
 
+[[filenames]]
+name = "build.xml"
+language = "Ant/XML"
+
+[[filenames]]
+name = "BUILD"
+language = "Bazel"
+
+[[filenames]]
+name = "WORKSPACE"
+language = "Bazel"
+
+[[filenames]]
+name = "Containerfile"
+language = "Containerfile"
+
+[[filenames]]
+name = "Jamfile"
+language = "Jam"
+
+[[filenames]]
+name = "Jamrules"
+language = "Jam"
+
+[[filenames]]
+name = "jamfile"
+language = "Jam"
+
+[[filenames]]
+name = "Justfile"
+language = "Justfile"
+
+[[filenames]]
+name = "justfile"
+language = "Justfile"
+
+[[filenames]]
+name = "pom.xml"
+language = "Maven/XML"
+
+[[filenames]]
+name = "meson.build"
+language = "Meson"
+
+[[filenames]]
+name = "Snakefile"
+language = "Snakemake"
+
 [[filename_prefixes]]
 prefix = "Dockerfile"
 language = "Dockerfile"

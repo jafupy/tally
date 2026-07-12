@@ -1,0 +1,203 @@
+[[languages]]
+name = "Agda"
+extensions = ["agda","lagda"]
+line_comments = ["--"]
+block_comments = [["{-","-}"]]
+
+[[languages]]
+name = "Beluga"
+extensions = ["bel"]
+line_comments = ["%"]
+block_comments = [["%{","%}"]]
+
+[[languages]]
+name = "Clean"
+extensions = ["dcl","icl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "ClojureC"
+extensions = ["cljc"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "ClojureScript"
+extensions = ["cljs"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Coq"
+extensions = []
+line_comments = []
+block_comments = [["(*","*)"]]
+
+[[languages]]
+name = "DAML"
+extensions = ["daml"]
+line_comments = ["--"]
+block_comments = [["{-","-}"]]
+
+[[languages]]
+name = "Derw"
+extensions = ["derw"]
+line_comments = ["--"]
+block_comments = [["{-","-}"]]
+
+[[languages]]
+name = "Elixir Script"
+extensions = ["exs"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Embedded Crystal"
+extensions = ["ecr"]
+line_comments = []
+block_comments = [["<%#","%>"]]
+
+[[languages]]
+name = "F# Script"
+extensions = ["fsx"]
+line_comments = ["//"]
+block_comments = [["{","}"],["(*","*)"]]
+
+[[languages]]
+name = "Fennel"
+extensions = ["fnl"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Finite State Language"
+extensions = ["fsl","jssm"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Futhark"
+extensions = ["fut"]
+line_comments = ["--"]
+block_comments = []
+
+[[languages]]
+name = "Haskell Boot"
+extensions = ["hs-boot","lhs-boot"]
+line_comments = ["--"]
+block_comments = [["{-","-}"]]
+
+[[languages]]
+name = "Hoon"
+extensions = ["hoon"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Idris"
+extensions = ["idr"]
+line_comments = ["|","--"]
+block_comments = [["{-","-}"]]
+
+[[languages]]
+name = "Janet"
+extensions = ["janet"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "LFE"
+extensions = ["lfe"]
+line_comments = [";"]
+block_comments = [["#|","|#"]]
+
+[[languages]]
+name = "Lean"
+extensions = ["hlean","lean"]
+line_comments = ["--"]
+block_comments = [["/-","-/"]]
+
+[[languages]]
+name = "Lem"
+extensions = ["lem"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Literate Idris"
+extensions = ["lidr"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Mercury"
+extensions = []
+line_comments = ["%"]
+block_comments = []
+
+[[languages]]
+name = "MoonBit"
+extensions = ["mbt","mbti","mbtx","mbty"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Nickel"
+extensions = ["ncl"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Pony"
+extensions = ["pony"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "PureScript"
+extensions = ["purs"]
+line_comments = ["--"]
+block_comments = [["{-","-}"]]
+
+[[languages]]
+name = "Racket"
+extensions = ["rkt","rktd","rktl","scrbl"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Raku"
+extensions = ["pm6","raku","rakumod"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "ReScript"
+extensions = ["res","resi"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "ReasonML"
+extensions = ["re","rei"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Scheme"
+extensions = ["sc","sch","scm","sld","sps","ss"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Standard ML"
+extensions = ["fun","sig","sml"]
+line_comments = []
+block_comments = [["(*","*)"]]
+
+[[languages]]
+name = "dhall"
+extensions = ["dhall"]
+line_comments = ["--"]
+block_comments = [["{-","-}"]]
