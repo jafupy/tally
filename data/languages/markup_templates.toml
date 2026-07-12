@@ -1,0 +1,263 @@
+[[languages]]
+name = "ASP"
+extensions = ["asa","ashx","asp","axd"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "AXAML"
+extensions = ["axaml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Blade"
+extensions = ["blade","blade.php"]
+line_comments = []
+block_comments = [["{{--","--}}"],["<!--","-->"]]
+
+[[languages]]
+name = "ColdFusion"
+extensions = ["cfm","cfml"]
+line_comments = ["//"]
+block_comments = [["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "Crystal Reports"
+extensions = []
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "DITA"
+extensions = ["dita"]
+line_comments = ["//"]
+block_comments = [["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "DTD"
+extensions = ["dtd"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "EEx"
+extensions = ["eex"]
+line_comments = []
+block_comments = [["<%#","%>"]]
+
+[[languages]]
+name = "EJS"
+extensions = ["ejs"]
+line_comments = []
+block_comments = [["<%#","%>"],["<!--","-->"]]
+
+[[languages]]
+name = "ERB"
+extensions = ["ERB","erb"]
+line_comments = []
+block_comments = [["<%#","%>"]]
+
+[[languages]]
+name = "FXML"
+extensions = ["fxml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Glade"
+extensions = ["glade"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "HTML EEx"
+extensions = ["heex"]
+line_comments = []
+block_comments = [["<%!--","--%>"]]
+
+[[languages]]
+name = "Haml"
+extensions = ["haml","haml.deface"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Hibernate"
+extensions = ["hbm.xml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "JSP"
+extensions = ["jsp","jspf"]
+line_comments = ["//"]
+block_comments = [["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "MXML"
+extensions = ["mxml"]
+line_comments = ["//"]
+block_comments = [["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "Mustache"
+extensions = ["mustache"]
+line_comments = []
+block_comments = [["{{!","}}"]]
+
+[[languages]]
+name = "Nunjucks"
+extensions = ["njk"]
+line_comments = []
+block_comments = [["{#","#}"]]
+
+[[languages]]
+name = "PlantUML"
+extensions = ["iuml","plantuml","pu","puml","wsd"]
+line_comments = []
+block_comments = [["/'","'/"]]
+
+[[languages]]
+name = "Pug"
+extensions = ["jade","pug"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Qt Linguist"
+extensions = []
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "RAML"
+extensions = ["raml"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Razor"
+extensions = ["cshtml","razor"]
+line_comments = ["//"]
+block_comments = [["@*","*@"],["/*","*/"],["<!--","-->"]]
+
+[[languages]]
+name = "Ruby HTML"
+extensions = ["rhtml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "SVG"
+extensions = ["SVG","svg"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Slim"
+extensions = ["slim"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Smarty"
+extensions = ["smarty","tpl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Templ"
+extensions = ["templ"]
+line_comments = ["*/*","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Twig"
+extensions = ["twig"]
+line_comments = []
+block_comments = [["{#","#}"]]
+
+[[languages]]
+name = "UXML"
+extensions = ["uxml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Velocity Template Language"
+extensions = ["vm"]
+line_comments = ["#"]
+block_comments = [["<!--","-->"],["#**","*#"]]
+
+[[languages]]
+name = "Vuejs Component"
+extensions = ["vue"]
+line_comments = ["//"]
+block_comments = [["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "WXML"
+extensions = ["wxml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Web Services Description"
+extensions = ["wsdl"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "XAML"
+extensions = ["xaml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "XHTML"
+extensions = ["xhtml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "XMI"
+extensions = ["XMI","xmi"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "XML (Qt/GTK)"
+extensions = []
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "XQuery"
+extensions = ["xq","xql","xqm","xquery","xqy"]
+line_comments = []
+block_comments = [["(:",":)"]]
+
+[[languages]]
+name = "XSD"
+extensions = ["XSD","xsd"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "XSLT"
+extensions = ["XSL","XSLT","xsl","xslt"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "builder"
+extensions = ["xml.builder"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "liquid"
+extensions = ["liquid"]
+line_comments = []
+block_comments = [["<!--","-->"]]

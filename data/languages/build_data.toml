@@ -1,0 +1,215 @@
+[[languages]]
+name = "Ant"
+extensions = ["build.xml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Bazel"
+extensions = ["BUILD"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Bicep"
+extensions = ["bicep","bicepparam"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "CSON"
+extensions = ["cson"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "CSV"
+extensions = ["csv"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Cake Build Script"
+extensions = ["cake"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Containerfile"
+extensions = ["Containerfile"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Gradle"
+extensions = ["gradle","gradle.kts"]
+line_comments = ["//"]
+block_comments = [["//","1"],["/*","*/"]]
+
+[[languages]]
+name = "INI"
+extensions = ["buildozer.spec","editorconfig","ini","lektorproject","prefs"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "InstallShield"
+extensions = ["ism"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "JSON5"
+extensions = ["json5"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Jam"
+extensions = []
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Jsonnet"
+extensions = ["jsonnet"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Juniper Junos"
+extensions = ["junos"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Justfile"
+extensions = ["just"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Liquibase"
+extensions = ["lb.xml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "MSBuild script"
+extensions = ["btproj","csproj","msbuild","vcproj","wdproj","wixproj"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Maven"
+extensions = ["pom","pom.xml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Meson"
+extensions = ["meson.build"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "NAnt script"
+extensions = ["build"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Nextflow"
+extensions = ["nf"]
+line_comments = ["//"]
+block_comments = [["//","1"],["/*","*/"]]
+
+[[languages]]
+name = "Nushell Object Notation"
+extensions = ["nuon"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "PRQL"
+extensions = ["prql"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Prisma Schema"
+extensions = ["prisma"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Properties"
+extensions = ["properties"]
+line_comments = ["#","!"]
+block_comments = []
+
+[[languages]]
+name = "Puppet"
+extensions = []
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Rego"
+extensions = ["rego"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "SQL Data"
+extensions = ["data.sql"]
+line_comments = ["--","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "SQL Stored Procedure"
+extensions = ["spc.sql","spoc.sql","sproc.sql","udf.sql"]
+line_comments = ["--","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "SaltStack"
+extensions = []
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Snakemake"
+extensions = ["rules","smk"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Starlark"
+extensions = ["bazel","bzl"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "SurrealQL"
+extensions = ["surql"]
+line_comments = ["//","--","#"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "TITAN Project File Information"
+extensions = ["tpd"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "VSCode Workspace"
+extensions = ["code-workspace"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Yarn"
+extensions = ["yarn"]
+line_comments = ["//"]
+block_comments = []

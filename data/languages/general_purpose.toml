@@ -1,0 +1,503 @@
+[[languages]]
+name = "ASP.NET"
+extensions = ["asax","ascx","asmx","aspx","master","sitemap","webinfo"]
+line_comments = ["//"]
+block_comments = [["/*","*/"],["<%--","--%>"],["<!--","-->"]]
+
+[[languages]]
+name = "ActionScript"
+extensions = ["as"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Activiti Business Process"
+extensions = ["bpmn"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Ant/XML"
+extensions = []
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Apex Class"
+extensions = []
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Apex Trigger"
+extensions = ["trigger"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Aria"
+extensions = ["aria"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "ArkTs"
+extensions = ["ets"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "AsciiDoc"
+extensions = ["adoc","asciidoc"]
+line_comments = []
+block_comments = [["////","////"]]
+
+[[languages]]
+name = "AspectJ"
+extensions = ["aj"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Asymptote"
+extensions = ["asy"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "BizTalk Orchestration"
+extensions = ["odx"]
+line_comments = ["#"]
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "BizTalk Pipeline"
+extensions = ["btp"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Blueprint"
+extensions = ["blp"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "BrightScript"
+extensions = ["brs"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "CCS"
+extensions = ["ccs"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Civet"
+extensions = ["civet","cvt","cvtx"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "ColdFusion CFScript"
+extensions = ["cfc"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Crystal"
+extensions = ["cr"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Cucumber"
+extensions = ["feature"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Delphi Form"
+extensions = ["dfm"]
+line_comments = ["//"]
+block_comments = [["(*","*)"]]
+
+[[languages]]
+name = "DenizenScript"
+extensions = ["dsc"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Drools"
+extensions = ["drl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Focus"
+extensions = ["focexec"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Forth"
+extensions = ["4th","e4","f83","fb","forth","fpm","fr","frt","ft","fth","rx"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Freemarker Template"
+extensions = ["ftl"]
+line_comments = []
+block_comments = [["<#--","-->"]]
+
+[[languages]]
+name = "Glimmer JavaScript"
+extensions = ["gjs"]
+line_comments = ["//"]
+block_comments = [["{{!","}}"],["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "Glimmer TypeScript"
+extensions = ["gts"]
+line_comments = ["//"]
+block_comments = [["{{!","}}"],["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "Godot Resource"
+extensions = ["tres"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Godot Scene"
+extensions = ["tscn"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Godot Shaders"
+extensions = ["gdshader"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Grails"
+extensions = ["gsp"]
+line_comments = ["//"]
+block_comments = [["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "Imba"
+extensions = ["imba"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "JSP Tag Library Definition"
+extensions = ["tld"]
+line_comments = ["//"]
+block_comments = [["<!--","-->"],["/*","*/"]]
+
+[[languages]]
+name = "JSX"
+extensions = ["jsx"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Jasper Report XML/Template"
+extensions = ["jrxml"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "JavaServer Faces"
+extensions = ["jsf"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Jinja Template"
+extensions = ["j2","jinja","jinja2"]
+line_comments = []
+block_comments = [["{#","#}"]]
+
+[[languages]]
+name = "Jupyter Notebook"
+extensions = ["ipynb"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "LESS"
+extensions = ["less"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Logtalk"
+extensions = ["lgt","logtalk"]
+line_comments = ["%","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Mako"
+extensions = ["mako","mao"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "Mathematica"
+extensions = ["cdf","ma","mathematica","mt","nbp","wl","wlt"]
+line_comments = []
+block_comments = [["(*","*)"]]
+
+[[languages]]
+name = "Maven/XML"
+extensions = []
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Mojo"
+extensions = ["mojo","🔥"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Nemerle"
+extensions = ["n"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "NetLogo"
+extensions = ["nlogo","nls"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Octave"
+extensions = []
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Org Mode"
+extensions = ["org"]
+line_comments = ["#"]
+block_comments = [["#+BEGIN_COMMENT","#+END_COMMENT"],["#+begin_comment","#+end_comment"]]
+
+[[languages]]
+name = "PO File"
+extensions = ["po"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Pek"
+extensions = ["pek"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Pig Latin"
+extensions = ["pig"]
+line_comments = ["--","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Pkl"
+extensions = ["pkl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Prolog"
+extensions = ["P","prolog","yap"]
+line_comments = ["%","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Qt Project"
+extensions = []
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "RapydScript"
+extensions = ["pyj"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Rmd"
+extensions = ["Rmd"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "RobotFramework"
+extensions = ["robot"]
+line_comments = ["#","*"]
+block_comments = []
+
+[[languages]]
+name = "Stylus"
+extensions = ["styl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "SugarSS"
+extensions = ["sss"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "TeX"
+extensions = ["aux","bbx","bib","bst","cbx","dtx","ins","lbx","ltx","mkii","mkiv","mkvi","sty","tex"]
+line_comments = ["%"]
+block_comments = []
+
+[[languages]]
+name = "Teamcenter def"
+extensions = []
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Teamcenter met"
+extensions = ["met"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Teamcenter mth"
+extensions = ["mth"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Typst"
+extensions = ["typ"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "USS"
+extensions = ["uss"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Visual Studio Module"
+extensions = []
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Visual Studio Solution"
+extensions = ["sln"]
+line_comments = ["#"]
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Visualforce Component"
+extensions = ["component"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "Visualforce Page"
+extensions = ["page"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "WXSS"
+extensions = ["wxss"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "WiX include"
+extensions = ["wxi"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "WiX source"
+extensions = ["wxs"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "WiX string localization"
+extensions = ["wxl"]
+line_comments = []
+block_comments = [["<!--","-->"]]
+
+[[languages]]
+name = "diff"
+extensions = ["diff","patch"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "dtrace"
+extensions = []
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "kvlang"
+extensions = ["kv"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "lex"
+extensions = ["l","lex"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "m4"
+extensions = ["ac","m4"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "make"
+extensions = ["Gnumakefile","Makefile","am","gnumakefile","makefile","mk"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "peg.js"
+extensions = ["pegjs"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "peggy"
+extensions = ["peggy"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "reStructuredText"
+extensions = ["rest","rest.txt","rst","rst.txt"]
+line_comments = []
+block_comments = []
+
+[[languages]]
+name = "tspeg"
+extensions = ["jspeg","tspeg"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]

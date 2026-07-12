@@ -1,0 +1,401 @@
+[[languages]]
+name = ".NET IL"
+extensions = []
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "ANTLR Grammar"
+extensions = ["g","g4"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Arduino Sketch"
+extensions = ["ino"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "C# Designer"
+extensions = ["designer.cs"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "C# Generated"
+extensions = []
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "C/C++ Header"
+extensions = ["H","h","hh","hpp","hxx"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "C3"
+extensions = ["c3","c3i","c3t"]
+line_comments = ["//"]
+block_comments = [["/*","*/"],["//","1"],["<*","*>"]]
+
+[[languages]]
+name = "Cadence"
+extensions = ["cdc"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Cairo"
+extensions = ["cairo"]
+line_comments = ["//","#"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Cangjie"
+extensions = []
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Carbon"
+extensions = ["carbon"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Chapel"
+extensions = ["chpl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Circom"
+extensions = ["circom"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Clarity"
+extensions = ["clar"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "CodeQL"
+extensions = ["ql","qll"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Constraint Grammar"
+extensions = ["cg3","rlx"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Cython"
+extensions = ["pxd","pxi","pyx"]
+line_comments = ["//","#"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Dafny"
+extensions = ["dfy"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "ECPP"
+extensions = ["ecpp"]
+line_comments = []
+block_comments = [["<%doc>","</%doc>"],["<#","#>"],["<!--","-->"]]
+
+[[languages]]
+name = "Flatbuffers"
+extensions = ["fbs"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "GLSL"
+extensions = ["comp","fp","frag","frg","fsh","fshader","geo","geom","glsl","glslv","gshader","tesc","tese","vert","vrx","vsh","vshader"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Hare"
+extensions = ["ha"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Haxe"
+extensions = ["hx","hxsl"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "HolyC"
+extensions = ["HC"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Jai"
+extensions = ["jai"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "LLVM IR"
+extensions = ["ll"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Linker Script"
+extensions = ["ld"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Logos"
+extensions = ["x","xm"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Mojom"
+extensions = ["mojom"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Objective-C++"
+extensions = ["mm"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Odin"
+extensions = ["odin"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "OpenCL"
+extensions = []
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "OpenSCAD"
+extensions = ["scad"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "P4"
+extensions = ["p4"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "PEG"
+extensions = ["peg"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Pawn"
+extensions = ["pawn","pwn"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Pest"
+extensions = ["pest"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "ProGuard"
+extensions = []
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Processing"
+extensions = ["pde"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "QML"
+extensions = ["qbs","qml"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Quxlang"
+extensions = ["qxs"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Rhai"
+extensions = ["rhai"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "SWIG"
+extensions = ["i"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Sema"
+extensions = ["sema"]
+line_comments = [";"]
+block_comments = [["#|","|#"]]
+
+[[languages]]
+name = "Slang"
+extensions = ["slang"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Slice"
+extensions = ["ice"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Slint"
+extensions = ["slint"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Solidity"
+extensions = ["sol"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Squirrel"
+extensions = ["nut"]
+line_comments = ["//","#"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "TEAL"
+extensions = ["teal"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "TableGen"
+extensions = ["td"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Thrift"
+extensions = ["thrift"]
+line_comments = ["//","#"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Titanium Style Sheet"
+extensions = ["tss"]
+line_comments = ["//"]
+block_comments = []
+
+[[languages]]
+name = "Umka"
+extensions = ["um"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Unity-Prefab"
+extensions = ["mat","prefab"]
+line_comments = ["#"]
+block_comments = []
+
+[[languages]]
+name = "Vala"
+extensions = ["vala"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Vala Header"
+extensions = ["vapi"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Verilog-SystemVerilog"
+extensions = ["sv","svh"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Vyper"
+extensions = ["vy"]
+line_comments = ["#","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "WebAssembly"
+extensions = ["wast","wat"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Windows Message File"
+extensions = ["mc"]
+line_comments = [";","//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Windows Module Definition"
+extensions = ["def"]
+line_comments = [";"]
+block_comments = []
+
+[[languages]]
+name = "Wren"
+extensions = ["wren"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "X++"
+extensions = ["xpo"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Xtend"
+extensions = ["xtend"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "Yang"
+extensions = ["yang"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
+
+[[languages]]
+name = "yacc"
+extensions = ["y","yacc"]
+line_comments = ["//"]
+block_comments = [["/*","*/"]]
