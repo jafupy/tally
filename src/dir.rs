@@ -1,7 +1,11 @@
 use crate::file::{self, Batch};
 use ignore::{DirEntry, Error, WalkBuilder, WalkState};
+use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 const FLUSH_EVERY_FILES: u64 = 512;
 const ADAPTIVE_SMALL_FILE_LIMIT: usize = 128;
@@ -13,26 +17,27 @@ pub fn scan_directory(
     threads: usize,
     adaptive_threads: bool,
     verbose: bool,
-) {
+) -> io::Result<()> {
     if adaptive_threads && threads > 1 {
         match probe_small_directory(path, ignore_git) {
             DirectoryProbe::Small { files, errors } => {
+                let mut failed = !errors.is_empty();
                 for err in errors {
                     eprintln!("failed to read directory entry: {err}");
                 }
-                scan_file_list(files, sink, verbose);
-                return;
+                failed |= !scan_file_list(files, sink, verbose);
+                return scan_result(failed);
             }
             DirectoryProbe::Large => {}
         }
     }
 
     if threads <= 1 {
-        scan_directory_serial(path, sink, ignore_git, verbose);
-        return;
+        return scan_directory_serial(path, sink, ignore_git, verbose);
     }
 
     let root = path.to_path_buf();
+    let failed = Arc::new(AtomicBool::new(false));
     let mut builder = walk_builder(path, ignore_git);
     builder.threads(threads);
     let walker = builder.build_parallel();
@@ -43,10 +48,12 @@ pub fn scan_directory(
             sink: Arc::clone(&sink),
             batch: Batch::default(),
             verbose,
+            failed: Arc::clone(&failed),
         };
 
         Box::new(move |entry| worker.visit(entry))
     });
+    scan_result(failed.load(Ordering::Relaxed))
 }
 
 enum DirectoryProbe {
@@ -83,8 +90,9 @@ fn probe_small_directory(path: &Path, ignore_git: bool) -> DirectoryProbe {
     DirectoryProbe::Small { files, errors }
 }
 
-fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) {
+fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) -> bool {
     let mut batch = Batch::default();
+    let mut succeeded = true;
 
     for path in files {
         match file::parse_file(&path, verbose) {
@@ -92,6 +100,7 @@ fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) {
             Ok(None) => continue,
             Err(error) => {
                 eprintln!("failed to read file {}: {error}", path.display());
+                succeeded = false;
                 continue;
             }
         }
@@ -104,18 +113,35 @@ fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) {
 
     sink.record_progress(batch.files());
     sink.add_batch(&mut batch);
+    succeeded
 }
 
-fn scan_directory_serial(path: &Path, sink: Arc<file::Sink>, ignore_git: bool, verbose: bool) {
+fn scan_directory_serial(
+    path: &Path,
+    sink: Arc<file::Sink>,
+    ignore_git: bool,
+    verbose: bool,
+) -> io::Result<()> {
+    let failed = Arc::new(AtomicBool::new(false));
     let mut worker = ScanWorker {
         root: path.to_path_buf(),
         sink,
         batch: Batch::default(),
         verbose,
+        failed: Arc::clone(&failed),
     };
 
     for entry in walk_builder(path, ignore_git).build() {
         worker.visit(entry);
+    }
+    scan_result(failed.load(Ordering::Relaxed))
+}
+
+fn scan_result(failed: bool) -> io::Result<()> {
+    if failed {
+        Err(io::Error::other("directory scan was incomplete"))
+    } else {
+        Ok(())
     }
 }
 
@@ -134,6 +160,7 @@ struct ScanWorker {
     sink: Arc<file::Sink>,
     batch: Batch,
     verbose: bool,
+    failed: Arc<AtomicBool>,
 }
 
 impl ScanWorker {
@@ -142,6 +169,7 @@ impl ScanWorker {
             Ok(entry) => entry,
             Err(err) => {
                 eprintln!("failed to read directory entry: {err}");
+                self.failed.store(true, Ordering::Relaxed);
                 return WalkState::Continue;
             }
         };
@@ -158,7 +186,10 @@ impl ScanWorker {
                 }
             }
             Ok(None) => {}
-            Err(error) => eprintln!("failed to read file {}: {error}", entry.path().display()),
+            Err(error) => {
+                eprintln!("failed to read file {}: {error}", entry.path().display());
+                self.failed.store(true, Ordering::Relaxed);
+            }
         }
 
         WalkState::Continue

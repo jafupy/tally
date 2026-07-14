@@ -57,7 +57,7 @@ fn main() {
 fn run() -> io::Result<()> {
     let args = parse_args();
     if args.version {
-        update::check().map_err(io::Error::other)?;
+        update::check()?;
         return Ok(());
     }
 
@@ -89,7 +89,7 @@ fn run() -> io::Result<()> {
             threads,
             adaptive_threads,
             verbose,
-        );
+        )?;
     } else {
         parse_single_file(&args.path, &sink, verbose)?;
     }
