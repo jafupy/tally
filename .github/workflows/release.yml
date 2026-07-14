@@ -27,11 +27,24 @@ jobs:
             target: x86_64-unknown-linux-gnu
             asset: tally-linux-x86_64
     runs-on: ${{ matrix.os }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ format('refs/tags/{0}', env.RELEASE_TAG) }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - name: Validate release version
+        shell: bash
+        run: |
+          package_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          release_version=${RELEASE_TAG#v}
+          if [[ $release_version =~ ^[0-9]+\.[0-9]+$ ]]; then
+            release_version="${release_version}.0"
+          fi
+          test "$release_version" = "$package_version"
       - run: cargo build --release --locked --target ${{ matrix.target }}
       - name: Name release binary
         shell: bash
@@ -44,13 +57,18 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
+      - name: Require existing release tag
+        shell: bash
+        run: git ls-remote --exit-code "https://github.com/${{ github.repository }}.git" "refs/tags/$RELEASE_TAG"
       - uses: actions/download-artifact@v4
         with:
           path: release
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           files: release/*

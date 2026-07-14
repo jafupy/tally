@@ -4,7 +4,7 @@ use crate::language::{self, LanguageDef, LanguageId};
 use memchr::{memchr, memmem};
 pub use sink::{Batch, Sink, Stats, Summary};
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
 const BUFFER_BYTES: usize = 64 * 1024;
@@ -26,27 +26,27 @@ pub enum FileStats {
     },
 }
 
-pub fn parse_file(path: &Path, verbose: bool) -> Option<FileStats> {
-    let Ok(mut reader) = open(path) else {
-        return None;
-    };
+pub fn parse_file(path: &Path, verbose: bool) -> io::Result<Option<FileStats>> {
+    let mut reader = open(path)?;
 
     let language_id = {
-        let prefix = read_prefix(&mut reader);
-        let contents_prefix = text_prefix(prefix)?;
+        let prefix = read_prefix(&mut reader)?;
+        let Some(contents_prefix) = text_prefix(prefix) else {
+            return Ok(None);
+        };
         language::detect_path(path, Some(contents_prefix))
     };
 
     match language_id {
         Some(language_id) => {
             let language = language::get(language_id);
-            let stats = count_lines(reader, language);
-            Some(FileStats::Known { language_id, stats })
+            let stats = count_lines(reader, language)?;
+            Ok(Some(FileStats::Known { language_id, stats }))
         }
         None => {
-            let stats = count_lines(reader, &UNKNOWN);
+            let stats = count_lines(reader, &UNKNOWN)?;
             let format = verbose.then(|| unknown_format(path)).flatten();
-            Some(FileStats::Unknown { format, stats })
+            Ok(Some(FileStats::Unknown { format, stats }))
         }
     }
 }
@@ -56,7 +56,13 @@ fn text_prefix(prefix: &[u8]) -> Option<&str> {
         return None;
     }
 
-    std::str::from_utf8(prefix).ok()
+    match std::str::from_utf8(prefix) {
+        Ok(text) => Some(text),
+        Err(error) if error.error_len().is_none() => {
+            std::str::from_utf8(&prefix[..error.valid_up_to()]).ok()
+        }
+        Err(_) => None,
+    }
 }
 
 fn unknown_format(path: &Path) -> Option<String> {
@@ -69,20 +75,16 @@ fn unknown_format(path: &Path) -> Option<String> {
         .map(|filename| filename.to_owned())
 }
 
-fn open(path: &Path) -> Result<BufReader<File>, ()> {
-    File::open(path)
-        .map(|file| BufReader::with_capacity(BUFFER_BYTES, file))
-        .map_err(|err| {
-            eprintln!("failed to open file {}: {err}", path.display());
-        })
+fn open(path: &Path) -> io::Result<BufReader<File>> {
+    File::open(path).map(|file| BufReader::with_capacity(BUFFER_BYTES, file))
 }
 
-fn read_prefix(reader: &mut BufReader<File>) -> &[u8] {
-    let buffer = reader.fill_buf().unwrap_or_default();
-    &buffer[..buffer.len().min(DETECTION_PREFIX_BYTES)]
+fn read_prefix(reader: &mut impl BufRead) -> io::Result<&[u8]> {
+    let buffer = reader.fill_buf()?;
+    Ok(&buffer[..buffer.len().min(DETECTION_PREFIX_BYTES)])
 }
 
-fn count_lines(mut reader: BufReader<File>, language: &LanguageDef) -> Stats {
+fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<Stats> {
     let mut stats = Stats {
         files: 1,
         ..Stats::default()
@@ -92,10 +94,10 @@ fn count_lines(mut reader: BufReader<File>, language: &LanguageDef) -> Stats {
 
     loop {
         let consumed = {
-            let buffer = match reader.fill_buf() {
-                Ok([]) | Err(_) => break,
-                Ok(buffer) => buffer,
-            };
+            let buffer = reader.fill_buf()?;
+            if buffer.is_empty() {
+                break;
+            }
             let mut start = 0;
 
             while let Some(relative_end) = memchr(b'\n', &buffer[start..]) {
@@ -127,13 +129,13 @@ fn count_lines(mut reader: BufReader<File>, language: &LanguageDef) -> Stats {
         count_line(&partial_line, language, &mut block_comment, &mut stats);
     }
 
-    stats
+    Ok(stats)
 }
 
-fn count_line(
+fn count_line<'a>(
     line: &[u8],
-    language: &LanguageDef,
-    block_comment: &mut Option<&str>,
+    language: &'a LanguageDef,
+    block_comment: &mut Option<&'a str>,
     stats: &mut Stats,
 ) {
     stats.lines += 1;
@@ -144,11 +146,9 @@ fn count_line(
         return;
     }
 
-    if let Some(end) = block_comment {
+    if block_comment.is_some() {
         stats.comments += 1;
-        if find_bytes(trimmed, end.as_bytes()).is_some() {
-            *block_comment = None;
-        }
+        update_block_comment(trimmed, language, block_comment);
         return;
     }
 
@@ -163,18 +163,42 @@ fn count_line(
 
     for &(start, end) in language.block_comments {
         let start = start.as_bytes();
-        let end_bytes = end.as_bytes();
 
         if trimmed.starts_with(start) {
             stats.comments += 1;
-            if find_bytes(trimmed, end_bytes).is_none_or(|end_at| end_at < start.len()) {
-                *block_comment = Some(end);
-            }
+            *block_comment = Some(end);
+            update_block_comment(&trimmed[start.len()..], language, block_comment);
             return;
         }
     }
 
     stats.code += 1;
+}
+
+fn update_block_comment<'a>(
+    mut remainder: &[u8],
+    language: &'a LanguageDef,
+    block_comment: &mut Option<&'a str>,
+) {
+    loop {
+        if let Some(end) = *block_comment {
+            let Some(end_at) = find_bytes(remainder, end.as_bytes()) else {
+                return;
+            };
+            remainder = trim_start_ascii(&remainder[end_at + end.len()..]);
+            *block_comment = None;
+        }
+
+        let Some(&(start, end)) = language
+            .block_comments
+            .iter()
+            .find(|(start, _)| remainder.starts_with(start.as_bytes()))
+        else {
+            return;
+        };
+        remainder = &remainder[start.len()..];
+        *block_comment = Some(end);
+    }
 }
 
 fn trim_start_ascii(bytes: &[u8]) -> &[u8] {
@@ -193,7 +217,31 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, path::PathBuf};
+    use std::{fs, io::Read, path::PathBuf};
+
+    struct FailingReader {
+        first_line_pending: bool,
+    }
+
+    impl Read for FailingReader {
+        fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::other("read failed"))
+        }
+    }
+
+    impl BufRead for FailingReader {
+        fn fill_buf(&mut self) -> io::Result<&[u8]> {
+            if self.first_line_pending {
+                Ok(b"code\n")
+            } else {
+                Err(io::Error::other("read failed"))
+            }
+        }
+
+        fn consume(&mut self, _amount: usize) {
+            self.first_line_pending = false;
+        }
+    }
 
     fn temp_file(name: &str, contents: &[u8]) -> PathBuf {
         let path = std::env::temp_dir().join(format!("tally-{}-{name}", std::process::id()));
@@ -204,7 +252,7 @@ mod tests {
     #[test]
     fn counts_file_without_trailing_newline() {
         let path = temp_file("no-newline.rs", b"fn main() {}");
-        let Some(FileStats::Known { stats, .. }) = parse_file(&path, false) else {
+        let Ok(Some(FileStats::Known { stats, .. })) = parse_file(&path, false) else {
             panic!("expected rust file stats");
         };
 
@@ -221,7 +269,7 @@ mod tests {
             "comments.rs",
             b"// comment\n\n/* block\nstill block */\nfn main() {}\n",
         );
-        let Some(FileStats::Known { stats, .. }) = parse_file(&path, false) else {
+        let Ok(Some(FileStats::Known { stats, .. })) = parse_file(&path, false) else {
             panic!("expected rust file stats");
         };
 
@@ -234,12 +282,26 @@ mod tests {
     }
 
     #[test]
+    fn tracks_a_new_block_comment_after_one_closes() {
+        let path = temp_file("adjacent-comments.css", b"/*\n*/ /*\ninside\n*/\n");
+        let Ok(Some(FileStats::Known { stats, .. })) = parse_file(&path, false) else {
+            panic!("expected CSS file stats");
+        };
+
+        assert_eq!(stats.lines, 4);
+        assert_eq!(stats.comments, 4);
+        assert_eq!(stats.code, 0);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn counts_lines_spanning_reader_buffers() {
         let path = temp_file(
             "long-line.rs",
             format!("{}\nfn main() {{}}\n", "x".repeat(BUFFER_BYTES + 1)).as_bytes(),
         );
-        let Some(FileStats::Known { stats, .. }) = parse_file(&path, false) else {
+        let Ok(Some(FileStats::Known { stats, .. })) = parse_file(&path, false) else {
             panic!("expected rust file stats");
         };
 
@@ -253,8 +315,38 @@ mod tests {
     fn skips_binary_files() {
         let path = temp_file("binary.rs", b"fn main() {}\0");
 
-        assert!(parse_file(&path, false).is_none());
+        assert!(parse_file(&path, false).unwrap().is_none());
 
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn accepts_utf8_split_at_the_detection_boundary() {
+        let mut contents = vec![b'x'; DETECTION_PREFIX_BYTES - 1];
+        contents.extend_from_slice("é\n".as_bytes());
+        let path = temp_file("split-utf8.rs", &contents);
+
+        let Ok(Some(FileStats::Known { stats, .. })) = parse_file(&path, false) else {
+            panic!("expected rust file stats");
+        };
+
+        assert_eq!(stats.files, 1);
+        assert_eq!(stats.lines, 1);
+        assert_eq!(stats.code, 1);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn propagates_reader_errors_instead_of_returning_partial_stats() {
+        let mut initial_failure = FailingReader {
+            first_line_pending: false,
+        };
+        assert!(read_prefix(&mut initial_failure).is_err());
+
+        let later_failure = FailingReader {
+            first_line_pending: true,
+        };
+        assert!(count_lines(later_failure, &UNKNOWN).is_err());
     }
 }
