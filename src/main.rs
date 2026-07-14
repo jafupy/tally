@@ -81,7 +81,7 @@ fn run() -> io::Result<()> {
             verbose,
         );
     } else {
-        parse_single_file(&args.path, &sink, verbose);
+        parse_single_file(&args.path, &sink, verbose)?;
     }
 
     if let Some((progress_done, progress)) = progress {
@@ -125,13 +125,14 @@ fn default_threads(path_is_dir: bool) -> usize {
         .min(4)
 }
 
-fn parse_single_file(path: &Path, sink: &file::Sink, verbose: bool) {
+fn parse_single_file(path: &Path, sink: &file::Sink, verbose: bool) -> io::Result<()> {
     let mut batch = Batch::default();
-    if let Some(file_stats) = parse_file(path, verbose) {
+    if let Some(file_stats) = parse_file(path, verbose)? {
         batch.add(file_stats);
     }
     sink.record_progress(batch.files());
     sink.add_batch(&mut batch);
+    Ok(())
 }
 
 fn show_progress(sink: Arc<file::Sink>, done: Receiver<()>) -> std::thread::JoinHandle<()> {
