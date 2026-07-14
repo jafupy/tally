@@ -7,7 +7,7 @@ use dir::scan_directory;
 use file::{Batch, parse_file};
 use std::{
     io::IsTerminal,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         mpsc::{self, Receiver},
@@ -104,7 +104,7 @@ fn default_threads(path_is_dir: bool) -> usize {
         .min(4)
 }
 
-fn parse_single_file(path: &PathBuf, sink: &file::Sink, verbose: bool) {
+fn parse_single_file(path: &Path, sink: &file::Sink, verbose: bool) {
     let mut batch = Batch::default();
     if let Some(file_stats) = parse_file(path, verbose) {
         batch.add(file_stats);

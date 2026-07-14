@@ -1,3 +1,4 @@
+use super::summary_rows;
 use crate::file::{Stats, Summary};
 
 pub fn print_summary(summary: &Summary, color: bool) {
@@ -10,80 +11,6 @@ pub fn print_summary(summary: &Summary, color: bool) {
     }
     print_separator(widths, color);
     print_row(widths, "Total", summary.all, color, true);
-}
-
-#[derive(serde::Serialize)]
-struct JsonSummary {
-    languages: Vec<JsonLanguage>,
-    total: JsonStats,
-}
-
-#[derive(serde::Serialize)]
-struct JsonLanguage {
-    language: &'static str,
-    #[serde(flatten)]
-    stats: JsonStats,
-}
-
-#[derive(serde::Serialize)]
-struct JsonStats {
-    files: u64,
-    lines: u64,
-    comments: u64,
-    blanks: u64,
-    code: u64,
-}
-
-impl From<Stats> for JsonStats {
-    fn from(stats: Stats) -> Self {
-        Self {
-            files: stats.files,
-            lines: stats.lines,
-            comments: stats.comments,
-            blanks: stats.blanks,
-            code: stats.code,
-        }
-    }
-}
-
-fn json_summary(summary: &Summary) -> JsonSummary {
-    JsonSummary {
-        languages: summary_rows(summary)
-            .into_iter()
-            .map(|(language, stats)| JsonLanguage {
-                language,
-                stats: stats.into(),
-            })
-            .collect(),
-        total: summary.all.into(),
-    }
-}
-
-pub fn print_json(summary: &Summary) {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json_summary(summary)).expect("summary should serialize")
-    );
-}
-
-fn summary_rows(summary: &Summary) -> Vec<(&'static str, Stats)> {
-    let mut rows = summary
-        .languages
-        .iter()
-        .map(|&(language_id, stats)| (crate::language::get(language_id).name, stats))
-        .collect::<Vec<_>>();
-
-    if summary.unknown.files > 0 {
-        rows.push(("Unknown", summary.unknown));
-    }
-
-    rows.sort_by(|(left_name, left), (right_name, right)| {
-        right
-            .code
-            .cmp(&left.code)
-            .then_with(|| left_name.cmp(right_name))
-    });
-    rows
 }
 
 #[derive(Clone, Copy)]
@@ -114,7 +41,6 @@ fn table_widths(rows: &[(&str, Stats)], total: Stats) -> TableWidths {
         widths.comments = widths.comments.max(format_number(stats.comments).len());
         widths.code = widths.code.max(format_number(stats.code).len());
     }
-
     widths
 }
 
@@ -218,71 +144,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn json_summary_has_language_rows_and_total() {
-        let stats = Stats {
-            files: 1,
-            lines: 3,
-            blanks: 1,
-            comments: 1,
-            code: 1,
-        };
-        let summary = Summary {
-            all: stats,
-            unknown: stats,
-            unknown_formats: Vec::new(),
-            languages: Vec::new(),
-        };
-
-        let value = serde_json::to_value(json_summary(&summary)).unwrap();
-
-        assert_eq!(value["languages"][0]["language"], "Unknown");
-        assert_eq!(value["languages"][0]["files"], 1);
-        assert_eq!(value["total"]["lines"], 3);
-    }
-
-    #[test]
     fn numbers_have_thousands_separators() {
         assert_eq!(format_number(0), "0");
         assert_eq!(format_number(999), "999");
         assert_eq!(format_number(1_000), "1,000");
         assert_eq!(format_number(12_345_678), "12,345,678");
-    }
-
-    #[test]
-    fn summary_rows_are_ordered_by_code() {
-        let summary = Summary {
-            all: Stats::default(),
-            unknown: Stats {
-                files: 1,
-                code: 200,
-                ..Stats::default()
-            },
-            unknown_formats: Vec::new(),
-            languages: vec![
-                (
-                    crate::language::LanguageId(0),
-                    Stats {
-                        files: 1,
-                        code: 100,
-                        ..Stats::default()
-                    },
-                ),
-                (
-                    crate::language::LanguageId(1),
-                    Stats {
-                        files: 1,
-                        code: 300,
-                        ..Stats::default()
-                    },
-                ),
-            ],
-        };
-
-        let code_counts = summary_rows(&summary)
-            .into_iter()
-            .map(|(_, stats)| stats.code)
-            .collect::<Vec<_>>();
-
-        assert_eq!(code_counts, [300, 200, 100]);
     }
 }
