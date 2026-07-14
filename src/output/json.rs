@@ -1,6 +1,5 @@
 use super::summary_rows;
 use crate::file::{Stats, Summary};
-use std::io::{self, Write};
 
 #[derive(serde::Serialize)]
 struct JsonSummary {
@@ -49,12 +48,11 @@ fn json_summary(summary: &Summary) -> JsonSummary {
     }
 }
 
-pub fn print_json(summary: &Summary) -> io::Result<()> {
-    writeln!(
-        io::stdout().lock(),
+pub fn print_json(summary: &Summary) {
+    println!(
         "{}",
         serde_json::to_string_pretty(&json_summary(summary)).expect("summary should serialize")
-    )
+    );
 }
 
 #[cfg(test)]
