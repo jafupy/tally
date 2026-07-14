@@ -2,15 +2,17 @@ use super::Release;
 use sha2::{Digest, Sha256};
 use std::{
     env, fs,
-    io::{self, Write},
-    process::Command,
+    io::{self, Read, Write},
+    process::{Command, ExitStatus, Stdio},
 };
 
 const REPOSITORY: &str = "jafupy/tally";
+const MAX_METADATA_BYTES: usize = 1024 * 1024;
+const MAX_BINARY_BYTES: usize = 16 * 1024 * 1024;
 
 pub fn latest_release() -> io::Result<Release> {
     let url = format!("https://api.github.com/repos/{REPOSITORY}/releases/latest");
-    let output = run_download(&url, true)?;
+    let output = run_download(&url, true, MAX_METADATA_BYTES)?;
     serde_json::from_slice(&output)
         .map_err(|error| io::Error::other(format!("invalid GitHub response: {error}")))
 }
@@ -22,7 +24,7 @@ pub fn install(release: &Release) -> io::Result<()> {
         .iter()
         .find(|asset| asset.name == asset_name)
         .ok_or_else(|| io::Error::other(format!("release has no {asset_name} binary")))?;
-    let binary = run_download(&asset.browser_download_url, false)?;
+    let binary = run_download(&asset.browser_download_url, false, MAX_BINARY_BYTES)?;
     verify_digest(&binary, asset.digest.as_deref())?;
     replace_current_executable(&binary)
 }
@@ -71,9 +73,18 @@ fn replace_current_executable(binary: &[u8]) -> io::Result<()> {
     result
 }
 
-fn run_download(url: &str, github_headers: bool) -> io::Result<Vec<u8>> {
+fn run_download(url: &str, github_headers: bool, max_bytes: usize) -> io::Result<Vec<u8>> {
+    let max_bytes_arg = max_bytes.to_string();
     let mut curl = Command::new("curl");
-    curl.args(["-fsSL", "--connect-timeout", "10", "--max-time", "60"]);
+    curl.args([
+        "-fsSL",
+        "--connect-timeout",
+        "10",
+        "--max-time",
+        "60",
+        "--max-filesize",
+        &max_bytes_arg,
+    ]);
     if github_headers {
         curl.args([
             "-H",
@@ -86,11 +97,17 @@ fn run_download(url: &str, github_headers: bool) -> io::Result<Vec<u8>> {
     }
     curl.arg(url);
 
-    let output = match curl.output() {
+    let (body, status) = match capture(curl, max_bytes) {
         Ok(output) => output,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             let mut wget = Command::new("wget");
-            wget.args(["-qO-", "--timeout=10", "--tries=1"]);
+            wget.args([
+                "-qO-",
+                "--timeout=10",
+                "--tries=1",
+                "--max-filesize",
+                &max_bytes_arg,
+            ]);
             if github_headers {
                 wget.args([
                     "--header=Accept: application/vnd.github+json",
@@ -98,21 +115,42 @@ fn run_download(url: &str, github_headers: bool) -> io::Result<Vec<u8>> {
                     "--user-agent=tally-update-check",
                 ]);
             }
-            wget.arg(url).output().map_err(|error| {
+            wget.arg(url);
+            capture(wget, max_bytes).map_err(|error| {
                 io::Error::other(format!("missing required command: curl or wget ({error})"))
             })?
         }
         Err(error) => return Err(io::Error::other(format!("failed to run curl: {error}"))),
     };
 
-    if output.status.success() {
-        Ok(output.stdout)
+    if status.success() {
+        Ok(body)
     } else {
-        Err(io::Error::other(format!(
-            "download failed with {}",
-            output.status
-        )))
+        Err(io::Error::other(format!("download failed with {status}")))
     }
+}
+
+fn capture(mut command: Command, max_bytes: usize) -> io::Result<(Vec<u8>, ExitStatus)> {
+    let mut child = command.stdout(Stdio::piped()).spawn()?;
+    let mut body = Vec::new();
+    let read = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("could not read download"))?
+        .take(max_bytes as u64 + 1)
+        .read_to_end(&mut body);
+
+    if let Err(error) = read {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
+    if body.len() > max_bytes {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(io::Error::other("download exceeded size limit"));
+    }
+    Ok((body, child.wait()?))
 }
 
 #[cfg(test)]
@@ -125,5 +163,12 @@ mod tests {
         assert!(verify_digest(b"tally", Some(&digest)).is_ok());
         assert!(verify_digest(b"tampered", Some(&digest)).is_err());
         assert!(verify_digest(b"tally", None).is_err());
+    }
+
+    #[test]
+    fn bounds_captured_downloads() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "printf 12345"]);
+        assert!(capture(command, 4).is_err());
     }
 }
