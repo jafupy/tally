@@ -130,10 +130,10 @@ fn count_lines(mut reader: BufReader<File>, language: &LanguageDef) -> Stats {
     stats
 }
 
-fn count_line(
+fn count_line<'a>(
     line: &[u8],
-    language: &LanguageDef,
-    block_comment: &mut Option<&str>,
+    language: &'a LanguageDef,
+    block_comment: &mut Option<&'a str>,
     stats: &mut Stats,
 ) {
     stats.lines += 1;
@@ -144,11 +144,9 @@ fn count_line(
         return;
     }
 
-    if let Some(end) = block_comment {
+    if block_comment.is_some() {
         stats.comments += 1;
-        if find_bytes(trimmed, end.as_bytes()).is_some() {
-            *block_comment = None;
-        }
+        update_block_comment(trimmed, language, block_comment);
         return;
     }
 
@@ -163,18 +161,42 @@ fn count_line(
 
     for &(start, end) in language.block_comments {
         let start = start.as_bytes();
-        let end_bytes = end.as_bytes();
 
         if trimmed.starts_with(start) {
             stats.comments += 1;
-            if find_bytes(trimmed, end_bytes).is_none_or(|end_at| end_at < start.len()) {
-                *block_comment = Some(end);
-            }
+            *block_comment = Some(end);
+            update_block_comment(&trimmed[start.len()..], language, block_comment);
             return;
         }
     }
 
     stats.code += 1;
+}
+
+fn update_block_comment<'a>(
+    mut remainder: &[u8],
+    language: &'a LanguageDef,
+    block_comment: &mut Option<&'a str>,
+) {
+    loop {
+        if let Some(end) = *block_comment {
+            let Some(end_at) = find_bytes(remainder, end.as_bytes()) else {
+                return;
+            };
+            remainder = trim_start_ascii(&remainder[end_at + end.len()..]);
+            *block_comment = None;
+        }
+
+        let Some(&(start, end)) = language
+            .block_comments
+            .iter()
+            .find(|(start, _)| remainder.starts_with(start.as_bytes()))
+        else {
+            return;
+        };
+        remainder = &remainder[start.len()..];
+        *block_comment = Some(end);
+    }
 }
 
 fn trim_start_ascii(bytes: &[u8]) -> &[u8] {
@@ -229,6 +251,20 @@ mod tests {
         assert_eq!(stats.comments, 3);
         assert_eq!(stats.blanks, 1);
         assert_eq!(stats.code, 1);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn tracks_a_new_block_comment_after_one_closes() {
+        let path = temp_file("adjacent-comments.css", b"/*\n*/ /*\ninside\n*/\n");
+        let Some(FileStats::Known { stats, .. }) = parse_file(&path, false) else {
+            panic!("expected CSS file stats");
+        };
+
+        assert_eq!(stats.lines, 4);
+        assert_eq!(stats.comments, 4);
+        assert_eq!(stats.code, 0);
 
         fs::remove_file(path).unwrap();
     }
