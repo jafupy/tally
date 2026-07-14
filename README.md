@@ -14,6 +14,8 @@ Text         1   200    73       0  127
 Total       16  2407   403       6 1998
 ```
 
+Use `tally --json .` to emit the same results as structured JSON.
+
 ## Install
 
 ```sh
