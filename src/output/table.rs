@@ -1,16 +1,18 @@
 use super::summary_rows;
 use crate::file::{Stats, Summary};
+use std::io::{self, Write};
 
-pub fn print_summary(summary: &Summary, color: bool) {
+pub fn print_summary(summary: &Summary, color: bool) -> io::Result<()> {
+    let mut output = io::stdout().lock();
     let rows = summary_rows(summary);
     let widths = table_widths(&rows, summary.all);
 
-    print_header(widths, color);
+    print_header(&mut output, widths, color)?;
     for (name, stats) in rows {
-        print_row(widths, name, stats, color, false);
+        print_row(&mut output, widths, name, stats, color, false)?;
     }
-    print_separator(widths, color);
-    print_row(widths, "Total", summary.all, color, true);
+    print_separator(&mut output, widths, color)?;
+    print_row(&mut output, widths, "Total", summary.all, color, true)
 }
 
 #[derive(Clone, Copy)]
@@ -58,7 +60,7 @@ pub fn format_number(number: u64) -> String {
     formatted
 }
 
-fn print_header(widths: TableWidths, color: bool) {
+fn print_header(output: &mut impl Write, widths: TableWidths, color: bool) -> io::Result<()> {
     let line = format!(
         "{:<name$} {:>files$} {:>lines$} {:>blanks$} {:>comments$} {:>code$}",
         "Language",
@@ -74,11 +76,11 @@ fn print_header(widths: TableWidths, color: bool) {
         comments = widths.comments,
         code = widths.code,
     );
-    print_styled(&line, color, "\x1b[1;36m");
-    print_separator(widths, color);
+    print_styled(output, &line, color, "\x1b[1;36m")?;
+    print_separator(output, widths, color)
 }
 
-fn print_separator(widths: TableWidths, color: bool) {
+fn print_separator(output: &mut impl Write, widths: TableWidths, color: bool) -> io::Result<()> {
     let line = format!(
         "{:-<name$} {:-<files$} {:-<lines$} {:-<blanks$} {:-<comments$} {:-<code$}",
         "",
@@ -94,25 +96,34 @@ fn print_separator(widths: TableWidths, color: bool) {
         comments = widths.comments,
         code = widths.code,
     );
-    print_styled(&line, color, "\x1b[2m");
+    print_styled(output, &line, color, "\x1b[2m")
 }
 
-pub fn print_unknown_formats(summary: &Summary, color: bool) {
+pub fn print_unknown_formats(summary: &Summary, color: bool) -> io::Result<()> {
     if summary.unknown_formats.is_empty() {
-        return;
+        return Ok(());
     }
 
+    let mut error = io::stderr().lock();
     if color {
-        eprintln!("\n\x1b[1;33mUnknown file formats:\x1b[0m");
+        writeln!(error, "\n\x1b[1;33mUnknown file formats:\x1b[0m")?;
     } else {
-        eprintln!("\nUnknown file formats:");
+        writeln!(error, "\nUnknown file formats:")?;
     }
     for (format, files) in &summary.unknown_formats {
-        eprintln!("  {format:<24} {:>8}", format_number(*files));
+        writeln!(error, "  {format:<24} {:>8}", format_number(*files))?;
     }
+    Ok(())
 }
 
-fn print_row(widths: TableWidths, name: &str, stats: Stats, color: bool, total: bool) {
+fn print_row(
+    output: &mut impl Write,
+    widths: TableWidths,
+    name: &str,
+    stats: Stats,
+    color: bool,
+    total: bool,
+) -> io::Result<()> {
     let line = format!(
         "{:<name_width$} {:>files_width$} {:>lines_width$} {:>blanks_width$} {:>comments_width$} {:>code_width$}",
         name,
@@ -128,14 +139,19 @@ fn print_row(widths: TableWidths, name: &str, stats: Stats, color: bool, total: 
         comments_width = widths.comments,
         code_width = widths.code,
     );
-    print_styled(&line, color, if total { "\x1b[1;32m" } else { "\x1b[34m" });
+    print_styled(
+        output,
+        &line,
+        color,
+        if total { "\x1b[1;32m" } else { "\x1b[34m" },
+    )
 }
 
-fn print_styled(line: &str, color: bool, style: &str) {
+fn print_styled(output: &mut impl Write, line: &str, color: bool, style: &str) -> io::Result<()> {
     if color {
-        println!("{style}{line}\x1b[0m");
+        writeln!(output, "{style}{line}\x1b[0m")
     } else {
-        println!("{line}");
+        writeln!(output, "{line}")
     }
 }
 

@@ -6,7 +6,7 @@ mod output;
 use dir::scan_directory;
 use file::{Batch, parse_file};
 use std::{
-    io::IsTerminal,
+    io::{self, ErrorKind, IsTerminal},
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -40,8 +40,28 @@ struct Args {
 }
 
 fn main() {
+    if let Err(error) = run() {
+        if error.kind() == ErrorKind::BrokenPipe {
+            return;
+        }
+        eprintln!("tally: {error}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> io::Result<()> {
     let args = parse_args();
-    let path_is_dir = args.path.is_dir();
+    let metadata = std::fs::metadata(&args.path)?;
+    let path_is_dir = metadata.is_dir();
+    if !path_is_dir && !metadata.is_file() {
+        return Err(io::Error::new(
+            ErrorKind::InvalidInput,
+            format!("{} is not a regular file or directory", args.path.display()),
+        ));
+    }
+    if !path_is_dir {
+        std::fs::File::open(&args.path)?;
+    }
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
     let verbose = args.verbose;
@@ -71,14 +91,15 @@ fn main() {
 
     let summary = sink.snapshot();
     if args.json {
-        output::print_json(&summary);
+        output::print_json(&summary)?;
     } else {
-        output::print_summary(&summary, std::io::stdout().is_terminal());
+        output::print_summary(&summary, std::io::stdout().is_terminal())?;
     }
 
     if verbose {
-        output::print_unknown_formats(&summary, std::io::stderr().is_terminal());
+        output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
     }
+    Ok(())
 }
 
 fn parse_args() -> Args {
