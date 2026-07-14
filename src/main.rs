@@ -65,10 +65,10 @@ fn main() {
     }
 
     let summary = sink.snapshot();
-    print_summary(&summary);
+    print_summary(&summary, std::io::stdout().is_terminal());
 
     if verbose {
-        print_unknown_formats(&summary);
+        print_unknown_formats(&summary, std::io::stderr().is_terminal());
     }
 }
 
@@ -118,7 +118,7 @@ fn show_progress(sink: Arc<file::Sink>, done: Receiver<()>) -> std::thread::Join
                     }
 
                     last_files = Some(files);
-                    eprint!("\rprocessed {files} files");
+                    eprint!("\r\x1b[36mprocessed {} files\x1b[0m", format_number(files));
                 }
             }
         }
@@ -127,30 +127,35 @@ fn show_progress(sink: Arc<file::Sink>, done: Receiver<()>) -> std::thread::Join
     })
 }
 
-fn print_summary(summary: &Summary) {
-    let mut rows = summary_rows(summary);
+fn print_summary(summary: &Summary, color: bool) {
+    let rows = summary_rows(summary);
     let widths = table_widths(&rows, summary.all);
 
-    print_header(widths);
-    for (name, stats) in rows.drain(..) {
-        print_row(widths, name, stats);
+    print_header(widths, color);
+    for (name, stats) in rows {
+        print_row(widths, name, stats, color, false);
     }
-    print_separator(widths);
-    print_row(widths, "Total", summary.all);
+    print_separator(widths, color);
+    print_row(widths, "Total", summary.all, color, true);
 }
 
 fn summary_rows(summary: &Summary) -> Vec<(&'static str, Stats)> {
-    let mut languages = summary.languages.clone();
-    languages.sort_by_key(|&(language_id, _)| crate::language::get(language_id).name);
-
-    let mut rows = languages
-        .into_iter()
-        .map(|(language_id, stats)| (crate::language::get(language_id).name, stats))
+    let mut rows = summary
+        .languages
+        .iter()
+        .map(|&(language_id, stats)| (crate::language::get(language_id).name, stats))
         .collect::<Vec<_>>();
 
     if summary.unknown.files > 0 {
         rows.push(("Unknown", summary.unknown));
     }
+
+    rows.sort_by(|(left_name, left), (right_name, right)| {
+        right
+            .code
+            .cmp(&left.code)
+            .then_with(|| left_name.cmp(right_name))
+    });
 
     rows
 }
@@ -177,22 +182,33 @@ fn table_widths(rows: &[(&str, Stats)], total: Stats) -> TableWidths {
 
     for &(name, stats) in rows.iter().chain([("Total", total)].iter()) {
         widths.name = widths.name.max(name.len());
-        widths.files = widths.files.max(digits(stats.files));
-        widths.lines = widths.lines.max(digits(stats.lines));
-        widths.blanks = widths.blanks.max(digits(stats.blanks));
-        widths.comments = widths.comments.max(digits(stats.comments));
-        widths.code = widths.code.max(digits(stats.code));
+        widths.files = widths.files.max(format_number(stats.files).len());
+        widths.lines = widths.lines.max(format_number(stats.lines).len());
+        widths.blanks = widths.blanks.max(format_number(stats.blanks).len());
+        widths.comments = widths.comments.max(format_number(stats.comments).len());
+        widths.code = widths.code.max(format_number(stats.code).len());
     }
 
     widths
 }
 
-fn digits(number: u64) -> usize {
-    number.max(1).ilog10() as usize + 1
+fn format_number(number: u64) -> String {
+    let digits = number.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+    let first_group = digits.len() % 3;
+
+    for (index, digit) in digits.bytes().enumerate() {
+        if index > 0 && index % 3 == first_group {
+            formatted.push(',');
+        }
+        formatted.push(char::from(digit));
+    }
+
+    formatted
 }
 
-fn print_header(widths: TableWidths) {
-    println!(
+fn print_header(widths: TableWidths, color: bool) {
+    let line = format!(
         "{:<name$} {:>files$} {:>lines$} {:>blanks$} {:>comments$} {:>code$}",
         "Language",
         "Files",
@@ -207,11 +223,12 @@ fn print_header(widths: TableWidths) {
         comments = widths.comments,
         code = widths.code,
     );
-    print_separator(widths);
+    print_styled(&line, color, "\x1b[1;36m");
+    print_separator(widths, color);
 }
 
-fn print_separator(widths: TableWidths) {
-    println!(
+fn print_separator(widths: TableWidths, color: bool) {
+    let line = format!(
         "{:-<name$} {:-<files$} {:-<lines$} {:-<blanks$} {:-<comments$} {:-<code$}",
         "",
         "",
@@ -226,28 +243,33 @@ fn print_separator(widths: TableWidths) {
         comments = widths.comments,
         code = widths.code,
     );
+    print_styled(&line, color, "\x1b[2m");
 }
 
-fn print_unknown_formats(summary: &Summary) {
+fn print_unknown_formats(summary: &Summary, color: bool) {
     if summary.unknown_formats.is_empty() {
         return;
     }
 
-    eprintln!("\nUnknown file formats:");
+    if color {
+        eprintln!("\n\x1b[1;33mUnknown file formats:\x1b[0m");
+    } else {
+        eprintln!("\nUnknown file formats:");
+    }
     for (format, files) in &summary.unknown_formats {
-        eprintln!("  {format:<24} {files:>8}");
+        eprintln!("  {format:<24} {:>8}", format_number(*files));
     }
 }
 
-fn print_row(widths: TableWidths, name: &str, stats: Stats) {
-    println!(
+fn print_row(widths: TableWidths, name: &str, stats: Stats, color: bool, total: bool) {
+    let line = format!(
         "{:<name_width$} {:>files_width$} {:>lines_width$} {:>blanks_width$} {:>comments_width$} {:>code_width$}",
         name,
-        stats.files,
-        stats.lines,
-        stats.blanks,
-        stats.comments,
-        stats.code,
+        format_number(stats.files),
+        format_number(stats.lines),
+        format_number(stats.blanks),
+        format_number(stats.comments),
+        format_number(stats.code),
         name_width = widths.name,
         files_width = widths.files,
         lines_width = widths.lines,
@@ -255,6 +277,15 @@ fn print_row(widths: TableWidths, name: &str, stats: Stats) {
         comments_width = widths.comments,
         code_width = widths.code,
     );
+    print_styled(&line, color, if total { "\x1b[1;32m" } else { "\x1b[34m" });
+}
+
+fn print_styled(line: &str, color: bool, style: &str) {
+    if color {
+        println!("{style}{line}\x1b[0m");
+    } else {
+        println!("{line}");
+    }
 }
 
 #[cfg(test)]
@@ -296,5 +327,51 @@ mod tests {
         let err = Args::parse_from(["tally", "--help"]).unwrap_err();
 
         assert_eq!(err, argue::Error::Help(Args::HELP));
+    }
+
+    #[test]
+    fn numbers_have_thousands_separators() {
+        assert_eq!(format_number(0), "0");
+        assert_eq!(format_number(999), "999");
+        assert_eq!(format_number(1_000), "1,000");
+        assert_eq!(format_number(12_345_678), "12,345,678");
+    }
+
+    #[test]
+    fn summary_rows_are_ordered_by_code() {
+        let summary = Summary {
+            all: Stats::default(),
+            unknown: Stats {
+                files: 1,
+                code: 200,
+                ..Stats::default()
+            },
+            unknown_formats: Vec::new(),
+            languages: vec![
+                (
+                    language::LanguageId(0),
+                    Stats {
+                        files: 1,
+                        code: 100,
+                        ..Stats::default()
+                    },
+                ),
+                (
+                    language::LanguageId(1),
+                    Stats {
+                        files: 1,
+                        code: 300,
+                        ..Stats::default()
+                    },
+                ),
+            ],
+        };
+
+        let code_counts = summary_rows(&summary)
+            .into_iter()
+            .map(|(_, stats)| stats.code)
+            .collect::<Vec<_>>();
+
+        assert_eq!(code_counts, [300, 200, 100]);
     }
 }
