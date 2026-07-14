@@ -2,6 +2,7 @@ mod dir;
 mod file;
 mod language;
 mod output;
+mod update;
 
 use dir::scan_directory;
 use file::{Batch, parse_file};
@@ -18,6 +19,10 @@ use std::{
 #[argue::parser(name = "tally", about = "Count and inspect a codebase")]
 #[derive(Debug)]
 struct Args {
+    /// Print the version and check GitHub for updates.
+    #[flag(short = 'V', long = "version")]
+    version: bool,
+
     /// Include files ignored by gitignore rules.
     #[flag(short = 'a', long = "all")]
     all: bool,
@@ -51,6 +56,11 @@ fn main() {
 
 fn run() -> io::Result<()> {
     let args = parse_args();
+    if args.version {
+        update::check().map_err(io::Error::other)?;
+        return Ok(());
+    }
+
     let metadata = std::fs::metadata(&args.path)?;
     let path_is_dir = metadata.is_dir();
     if !path_is_dir && !metadata.is_file() {
@@ -182,6 +192,7 @@ mod tests {
         assert!(!args.all);
         assert!(!args.verbose);
         assert!(!args.json);
+        assert!(!args.version);
         assert_eq!(args.threads, None);
         assert_eq!(args.path, PathBuf::from("."));
     }
@@ -202,5 +213,12 @@ mod tests {
         let err = Args::parse_from(["tally", "--help"]).unwrap_err();
 
         assert_eq!(err, argue::Error::Help(Args::HELP));
+    }
+
+    #[test]
+    fn args_parse_version() {
+        let args = Args::parse_from(["tally", "--version"]).unwrap();
+
+        assert!(args.version);
     }
 }
