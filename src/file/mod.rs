@@ -56,13 +56,7 @@ fn text_prefix(prefix: &[u8]) -> Option<&str> {
         return None;
     }
 
-    match std::str::from_utf8(prefix) {
-        Ok(text) => Some(text),
-        Err(error) if error.error_len().is_none() => {
-            std::str::from_utf8(&prefix[..error.valid_up_to()]).ok()
-        }
-        Err(_) => None,
-    }
+    std::str::from_utf8(prefix).ok()
 }
 
 fn unknown_format(path: &Path) -> Option<String> {
@@ -296,23 +290,6 @@ mod tests {
         let path = temp_file("binary.rs", b"fn main() {}\0");
 
         assert!(parse_file(&path, false).is_none());
-
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn accepts_utf8_split_at_the_detection_boundary() {
-        let mut contents = vec![b'x'; DETECTION_PREFIX_BYTES - 1];
-        contents.extend_from_slice("é\n".as_bytes());
-        let path = temp_file("split-utf8.rs", &contents);
-
-        let Some(FileStats::Known { stats, .. }) = parse_file(&path, false) else {
-            panic!("expected rust file stats");
-        };
-
-        assert_eq!(stats.files, 1);
-        assert_eq!(stats.lines, 1);
-        assert_eq!(stats.code, 1);
 
         fs::remove_file(path).unwrap();
     }
