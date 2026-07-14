@@ -26,7 +26,7 @@ tally .
 Installs to `~/.local/bin`.
 
 Run `tally --version` to print the installed version and check GitHub for a newer
-release. When one is available, Tally shows its release notes and offers to run
-the installer again.
+release. When one is available, Tally shows its release notes and offers to
+download and install the matching release binary.
 
 GPL-3.0-or-later. Counts faster than anyone asked it to.
