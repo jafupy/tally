@@ -1,9 +1,10 @@
 mod dir;
 mod file;
 mod language;
+mod output;
 
 use dir::scan_directory;
-use file::{Batch, Stats, Summary, parse_file};
+use file::{Batch, parse_file};
 use std::{
     io::IsTerminal,
     path::PathBuf,
@@ -28,6 +29,10 @@ struct Args {
     /// Print extra diagnostics, including unknown file formats.
     #[flag(short = 'v', long = "verbose")]
     verbose: bool,
+
+    /// Output results as JSON.
+    #[flag(long = "json")]
+    json: bool,
 
     /// Path to tally
     #[positional(default = ".")]
@@ -65,10 +70,14 @@ fn main() {
     }
 
     let summary = sink.snapshot();
-    print_summary(&summary);
+    if args.json {
+        output::print_json(&summary);
+    } else {
+        output::print_summary(&summary);
+    }
 
     if verbose {
-        print_unknown_formats(&summary);
+        output::print_unknown_formats(&summary);
     }
 }
 
@@ -127,136 +136,6 @@ fn show_progress(sink: Arc<file::Sink>, done: Receiver<()>) -> std::thread::Join
     })
 }
 
-fn print_summary(summary: &Summary) {
-    let mut rows = summary_rows(summary);
-    let widths = table_widths(&rows, summary.all);
-
-    print_header(widths);
-    for (name, stats) in rows.drain(..) {
-        print_row(widths, name, stats);
-    }
-    print_separator(widths);
-    print_row(widths, "Total", summary.all);
-}
-
-fn summary_rows(summary: &Summary) -> Vec<(&'static str, Stats)> {
-    let mut languages = summary.languages.clone();
-    languages.sort_by_key(|&(language_id, _)| crate::language::get(language_id).name);
-
-    let mut rows = languages
-        .into_iter()
-        .map(|(language_id, stats)| (crate::language::get(language_id).name, stats))
-        .collect::<Vec<_>>();
-
-    if summary.unknown.files > 0 {
-        rows.push(("Unknown", summary.unknown));
-    }
-
-    rows
-}
-
-#[derive(Clone, Copy)]
-struct TableWidths {
-    name: usize,
-    files: usize,
-    lines: usize,
-    blanks: usize,
-    comments: usize,
-    code: usize,
-}
-
-fn table_widths(rows: &[(&str, Stats)], total: Stats) -> TableWidths {
-    let mut widths = TableWidths {
-        name: "Language".len(),
-        files: "Files".len(),
-        lines: "Lines".len(),
-        blanks: "Blank".len(),
-        comments: "Comment".len(),
-        code: "Code".len(),
-    };
-
-    for &(name, stats) in rows.iter().chain([("Total", total)].iter()) {
-        widths.name = widths.name.max(name.len());
-        widths.files = widths.files.max(digits(stats.files));
-        widths.lines = widths.lines.max(digits(stats.lines));
-        widths.blanks = widths.blanks.max(digits(stats.blanks));
-        widths.comments = widths.comments.max(digits(stats.comments));
-        widths.code = widths.code.max(digits(stats.code));
-    }
-
-    widths
-}
-
-fn digits(number: u64) -> usize {
-    number.max(1).ilog10() as usize + 1
-}
-
-fn print_header(widths: TableWidths) {
-    println!(
-        "{:<name$} {:>files$} {:>lines$} {:>blanks$} {:>comments$} {:>code$}",
-        "Language",
-        "Files",
-        "Lines",
-        "Blank",
-        "Comment",
-        "Code",
-        name = widths.name,
-        files = widths.files,
-        lines = widths.lines,
-        blanks = widths.blanks,
-        comments = widths.comments,
-        code = widths.code,
-    );
-    print_separator(widths);
-}
-
-fn print_separator(widths: TableWidths) {
-    println!(
-        "{:-<name$} {:-<files$} {:-<lines$} {:-<blanks$} {:-<comments$} {:-<code$}",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        name = widths.name,
-        files = widths.files,
-        lines = widths.lines,
-        blanks = widths.blanks,
-        comments = widths.comments,
-        code = widths.code,
-    );
-}
-
-fn print_unknown_formats(summary: &Summary) {
-    if summary.unknown_formats.is_empty() {
-        return;
-    }
-
-    eprintln!("\nUnknown file formats:");
-    for (format, files) in &summary.unknown_formats {
-        eprintln!("  {format:<24} {files:>8}");
-    }
-}
-
-fn print_row(widths: TableWidths, name: &str, stats: Stats) {
-    println!(
-        "{:<name_width$} {:>files_width$} {:>lines_width$} {:>blanks_width$} {:>comments_width$} {:>code_width$}",
-        name,
-        stats.files,
-        stats.lines,
-        stats.blanks,
-        stats.comments,
-        stats.code,
-        name_width = widths.name,
-        files_width = widths.files,
-        lines_width = widths.lines,
-        blanks_width = widths.blanks,
-        comments_width = widths.comments,
-        code_width = widths.code,
-    );
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,16 +156,18 @@ mod tests {
 
         assert!(!args.all);
         assert!(!args.verbose);
+        assert!(!args.json);
         assert_eq!(args.threads, None);
         assert_eq!(args.path, PathBuf::from("."));
     }
 
     #[test]
     fn args_parse_flags_options_and_path() {
-        let args = Args::parse_from(["tally", "--all", "-v", "-j", "2", "src"]).unwrap();
+        let args = Args::parse_from(["tally", "--all", "--json", "-v", "-j", "2", "src"]).unwrap();
 
         assert!(args.all);
         assert!(args.verbose);
+        assert!(args.json);
         assert_eq!(args.threads, Some(2));
         assert_eq!(args.path, PathBuf::from("src"));
     }
