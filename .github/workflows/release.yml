@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ format('refs/tags/{0}', env.RELEASE_TAG) }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -57,13 +57,18 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
+      - name: Require existing release tag
+        shell: bash
+        run: git ls-remote --exit-code "https://github.com/${{ github.repository }}.git" "refs/tags/$RELEASE_TAG"
       - uses: actions/download-artifact@v4
         with:
           path: release
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           files: release/*
