@@ -87,13 +87,18 @@ fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) {
     let mut batch = Batch::default();
 
     for path in files {
-        if let Some(stats) = file::parse_file(&path, verbose) {
-            batch.add(stats);
-
-            if batch.files() >= FLUSH_EVERY_FILES {
-                sink.record_progress(batch.files());
-                sink.add_batch(&mut batch);
+        match file::parse_file(&path, verbose) {
+            Ok(Some(stats)) => batch.add(stats),
+            Ok(None) => continue,
+            Err(error) => {
+                eprintln!("failed to read file {}: {error}", path.display());
+                continue;
             }
+        }
+
+        if batch.files() >= FLUSH_EVERY_FILES {
+            sink.record_progress(batch.files());
+            sink.add_batch(&mut batch);
         }
     }
 
@@ -145,12 +150,15 @@ impl ScanWorker {
             return WalkState::Continue;
         }
 
-        if let Some(stats) = file::parse_file(entry.path(), self.verbose) {
-            self.batch.add(stats);
-
-            if self.batch.files() >= FLUSH_EVERY_FILES {
-                self.flush();
+        match file::parse_file(entry.path(), self.verbose) {
+            Ok(Some(stats)) => {
+                self.batch.add(stats);
+                if self.batch.files() >= FLUSH_EVERY_FILES {
+                    self.flush();
+                }
             }
+            Ok(None) => {}
+            Err(error) => eprintln!("failed to read file {}: {error}", entry.path().display()),
         }
 
         WalkState::Continue
