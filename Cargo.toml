@@ -6,9 +6,13 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 argue = { git = "https://github.com/jafupy/argue" }
+crossterm = "0.29"
 ignore = "0.4"
 memchr = "2"
 regex = { version = "1", default-features = false, features = ["perf", "std"] }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [profile.release]
 lto = "thin"

@@ -1,12 +1,13 @@
 mod dir;
 mod file;
 mod language;
+mod update;
 
 use dir::scan_directory;
 use file::{Batch, Stats, Summary, parse_file};
 use std::{
     io::IsTerminal,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         mpsc::{self, Receiver},
@@ -17,6 +18,10 @@ use std::{
 #[argue::parser(name = "tally", about = "Count and inspect a codebase")]
 #[derive(Debug)]
 struct Args {
+    /// Print the version and check GitHub for updates.
+    #[flag(short = 'V', long = "version")]
+    version: bool,
+
     /// Include files ignored by gitignore rules.
     #[flag(short = 'a', long = "all")]
     all: bool,
@@ -36,6 +41,14 @@ struct Args {
 
 fn main() {
     let args = parse_args();
+    if args.version {
+        if let Err(error) = update::check() {
+            eprintln!("could not check for updates: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let path_is_dir = args.path.is_dir();
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
@@ -95,7 +108,7 @@ fn default_threads(path_is_dir: bool) -> usize {
         .min(4)
 }
 
-fn parse_single_file(path: &PathBuf, sink: &file::Sink, verbose: bool) {
+fn parse_single_file(path: &Path, sink: &file::Sink, verbose: bool) {
     let mut batch = Batch::default();
     if let Some(file_stats) = parse_file(path, verbose) {
         batch.add(file_stats);
@@ -277,6 +290,7 @@ mod tests {
 
         assert!(!args.all);
         assert!(!args.verbose);
+        assert!(!args.version);
         assert_eq!(args.threads, None);
         assert_eq!(args.path, PathBuf::from("."));
     }
@@ -296,5 +310,12 @@ mod tests {
         let err = Args::parse_from(["tally", "--help"]).unwrap_err();
 
         assert_eq!(err, argue::Error::Help(Args::HELP));
+    }
+
+    #[test]
+    fn args_parse_version() {
+        let args = Args::parse_from(["tally", "--version"]).unwrap();
+
+        assert!(args.version);
     }
 }

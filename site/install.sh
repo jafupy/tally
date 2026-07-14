@@ -47,9 +47,9 @@ case "$(uname -s)" in
 esac
 
 if command -v curl >/dev/null 2>&1; then
-  fetch() { curl -fsSL "$1" -o "$2"; }
+  fetch() { curl -fsSL --connect-timeout 10 --max-time 60 "$1" -o "$2"; }
 elif command -v wget >/dev/null 2>&1; then
-  fetch() { wget -qO "$2" "$1"; }
+  fetch() { wget -qO "$2" --timeout=10 --tries=1 "$1"; }
 else
   say "missing required command: curl or wget"
   exit 1
