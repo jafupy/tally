@@ -13,8 +13,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install host linker
         run: sudo apt-get update && sudo apt-get install -y lld
-      - name: Install cargo-wasix
-        run: cargo install cargo-wasix --locked --quiet
+      - uses: wasix-org/cargo-wasix@v0.1.31
+        with:
+          version: "0.1.31"
+          toolchain-version: "v2026-07-07.3+rust-1.96"
+          locked: "true"
       - name: Build
         id: build
         continue-on-error: true
