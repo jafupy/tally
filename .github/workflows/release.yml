@@ -54,8 +54,38 @@ jobs:
           name: ${{ matrix.asset }}
           path: ${{ matrix.asset }}
 
+  build-wasix:
+    name: Build WASIX
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ format('refs/tags/{0}', env.RELEASE_TAG) }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Validate release version
+        shell: bash
+        run: |
+          package_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          release_version=${RELEASE_TAG#v}
+          if [[ $release_version =~ ^[0-9]+\.[0-9]+$ ]]; then
+            release_version="${release_version}.0"
+          fi
+          test "$release_version" = "$package_version"
+      - name: Install cargo-wasix
+        run: cargo install cargo-wasix --locked
+      - name: Build WASIX binary
+        run: cargo wasix build --release --locked
+      - name: Name release binary
+        run: cp target/wasm32-wasmer-wasi/release/tally.wasm tally-wasix.wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tally-wasix
+          path: tally-wasix.wasm
+
   publish:
-    needs: build
+    needs: [build, build-wasix]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
