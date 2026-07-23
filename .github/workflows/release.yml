@@ -97,10 +97,6 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ format('refs/tags/{0}', env.RELEASE_TAG) }}
-          path: source
       - name: Require existing release tag
         shell: bash
         run: git ls-remote --exit-code "https://github.com/${{ github.repository }}.git" "refs/tags/$RELEASE_TAG"
@@ -108,19 +104,19 @@ jobs:
         with:
           path: release
           merge-multiple: true
-      - name: Publish browser runtime branch
-        shell: bash
+      - name: Upload browser runtime to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
-          cd source
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git switch --orphan browser-runtime
-          git rm -rf . >/dev/null 2>&1 || true
-          cp ../release/tally.wasm tally.wasm
-          printf '# Tally browser runtime\n\nGenerated from %s.\n' "$RELEASE_TAG" > README.md
-          git add tally.wasm README.md
-          git commit -m "Publish browser runtime $RELEASE_TAG"
-          git push --force origin HEAD:browser-runtime
+          aws s3 cp release/tally.wasm \
+            "s3://$R2_BUCKET/tally/tally.wasm" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type application/wasm \
+            --cache-control no-store
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
@@ -128,3 +124,7 @@ jobs:
           files: |
             release/tally-mac-arm
             release/tally-linux-x86_64
+      - name: Rebuild jafupy.com
+        env:
+          DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$DEPLOY_HOOK"
