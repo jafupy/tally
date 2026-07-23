@@ -74,7 +74,7 @@ jobs:
           fi
           test "$release_version" = "$package_version"
       - name: Install host linker
-        run: sudo apt-get update && sudo apt-get install -y lld
+        run: sudo apt-get install -y lld
       - uses: wasix-org/cargo-wasix@89980447bc9b6c001f5631c1598780d3dcb6f17d
         with:
           version: "0.1.31"
