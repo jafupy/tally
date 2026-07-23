@@ -15,5 +15,7 @@ jobs:
         run: cargo install cargo-wasix --locked
       - name: Build
         run: cargo wasix build --release --locked
+      - name: Install Wasmer
+        run: curl -sSfL https://get.wasmer.io | sh
       - name: Smoke test
-        run: wasmer run target/wasm32-wasmer-wasi/release/tally.wasm -- --version
+        run: ~/.wasmer/bin/wasmer run target/wasm32-wasmer-wasi/release/tally.wasm -- --version
