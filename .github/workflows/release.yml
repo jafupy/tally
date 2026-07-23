@@ -73,6 +73,8 @@ jobs:
             release_version="${release_version}.0"
           fi
           test "$release_version" = "$package_version"
+      - name: Install host linker
+        run: sudo apt-get update && sudo apt-get install -y lld
       - name: Install cargo-wasix
         run: cargo install cargo-wasix --locked
       - name: Build WASIX binary
