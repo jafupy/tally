@@ -54,8 +54,45 @@ jobs:
           name: ${{ matrix.asset }}
           path: ${{ matrix.asset }}
 
+  build-wasix:
+    name: Build browser runtime
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ format('refs/tags/{0}', env.RELEASE_TAG) }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Validate release version
+        shell: bash
+        run: |
+          package_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          release_version=${RELEASE_TAG#v}
+          if [[ $release_version =~ ^[0-9]+\.[0-9]+$ ]]; then
+            release_version="${release_version}.0"
+          fi
+          test "$release_version" = "$package_version"
+      - name: Install host linker
+        run: sudo apt-get install -y lld
+      - uses: wasix-org/cargo-wasix@89980447bc9b6c001f5631c1598780d3dcb6f17d
+        with:
+          version: "0.1.31"
+          toolchain-version: "v2026-07-07.3+rust-1.96"
+          locked: "true"
+      - name: Build WASIX binary
+        run: |
+          rm Cargo.lock
+          cargo wasix build --release
+      - name: Name browser runtime
+        run: cp target/wasm32-wasmer-wasi/release/tally.wasm tally.wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tally-browser-runtime
+          path: tally.wasm
+
   publish:
-    needs: build
+    needs: [build, build-wasix]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -67,8 +104,27 @@ jobs:
         with:
           path: release
           merge-multiple: true
+      - name: Upload browser runtime to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          aws s3 cp release/tally.wasm \
+            "s3://$R2_BUCKET/tally/tally.wasm" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type application/wasm \
+            --cache-control no-store
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
-          files: release/*
+          files: |
+            release/tally-mac-arm
+            release/tally-linux-x86_64
+      - name: Rebuild jafupy.com
+        env:
+          DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$DEPLOY_HOOK"
