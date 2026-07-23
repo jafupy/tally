@@ -2,7 +2,6 @@ mod dir;
 mod file;
 mod language;
 mod output;
-#[cfg(not(target_os = "wasi"))]
 mod update;
 
 use dir::scan_directory;
@@ -58,7 +57,7 @@ fn main() {
 fn run() -> io::Result<()> {
     let args = parse_args();
     if args.version {
-        print_version()?;
+        update::check()?;
         return Ok(());
     }
 
@@ -110,17 +109,6 @@ fn run() -> io::Result<()> {
     if verbose {
         output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
     }
-    Ok(())
-}
-
-#[cfg(not(target_os = "wasi"))]
-fn print_version() -> io::Result<()> {
-    update::check()
-}
-
-#[cfg(target_os = "wasi")]
-fn print_version() -> io::Result<()> {
-    println!("tally {}", env!("CARGO_PKG_VERSION"));
     Ok(())
 }
 
@@ -230,6 +218,7 @@ mod tests {
     #[test]
     fn args_parse_version() {
         let args = Args::parse_from(["tally", "--version"]).unwrap();
+
         assert!(args.version);
     }
 }
