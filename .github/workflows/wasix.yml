@@ -1,0 +1,19 @@
+name: WASIX
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-wasix
+        run: cargo install cargo-wasix --locked
+      - name: Build
+        run: cargo wasix build --release --locked
+      - name: Smoke test
+        run: wasmer run target/wasm32-wasmer-wasi/release/tally.wasm -- --version
