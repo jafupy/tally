@@ -75,8 +75,11 @@ jobs:
           test "$release_version" = "$package_version"
       - name: Install host linker
         run: sudo apt-get update && sudo apt-get install -y lld
-      - name: Install cargo-wasix
-        run: cargo install cargo-wasix --locked
+      - uses: wasix-org/cargo-wasix@v0.1.31
+        with:
+          version: "0.1.31"
+          toolchain-version: "v2026-07-07.3+rust-1.96"
+          locked: "true"
       - name: Build WASIX binary
         run: |
           rm Cargo.lock
