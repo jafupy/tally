@@ -14,7 +14,20 @@ jobs:
       - name: Install cargo-wasix
         run: cargo install cargo-wasix --locked --quiet
       - name: Build
-        run: cargo wasix build --release --locked --message-format=short
+        id: build
+        continue-on-error: true
+        run: cargo wasix build --release --locked --message-format=short > wasix-build.log 2>&1
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasix-build-log
+          path: wasix-build.log
+      - name: Report build failure
+        if: steps.build.outcome == 'failure'
+        run: |
+          cat wasix-build.log
+          exit 1
       - name: Install Wasmer
         run: curl -sSfL https://get.wasmer.io | sh
       - name: Smoke test
