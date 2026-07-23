@@ -12,9 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-wasix
-        run: cargo install cargo-wasix --locked
+        run: cargo install cargo-wasix --locked --quiet
       - name: Build
-        run: cargo wasix build --release --locked
+        run: cargo wasix build --release --locked --message-format=short
       - name: Install Wasmer
         run: curl -sSfL https://get.wasmer.io | sh
       - name: Smoke test
