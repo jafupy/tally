@@ -207,6 +207,7 @@ name = "JSX"
 extensions = ["jsx"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
 
 [[languages]]
 name = "Jasper Report XML/Template"
@@ -237,6 +238,7 @@ name = "LESS"
 extensions = ["less"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Logtalk"
@@ -315,6 +317,7 @@ name = "Pkl"
 extensions = ["pkl"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Prolog"
@@ -387,6 +390,7 @@ name = "Typst"
 extensions = ["typ"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "USS"

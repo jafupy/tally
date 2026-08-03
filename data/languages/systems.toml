@@ -9,18 +9,21 @@ name = "C"
 extensions = ["c", "h"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "C++"
 extensions = ["cc", "cpp", "cxx", "c++", "hh", "hpp", "hxx", "h++", "ipp", "ixx"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "CUDA"
 extensions = ["cu", "cuh"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "D"
@@ -33,24 +36,28 @@ name = "Go"
 extensions = ["go"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
 
 [[languages]]
 name = "HLSL"
 extensions = ["hlsl"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Metal"
 extensions = ["metal"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Objective-C"
 extensions = ["m", "mm"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages.disambiguation]]
 regex = "^\\s*#\\s*import\\b"
@@ -69,18 +76,21 @@ name = "Rust"
 extensions = ["rs"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "Swift"
 extensions = ["swift"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "V"
 extensions = ["v", "vsh"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages.disambiguation]]
 regex = "^\\s*fn\\s+\\w+"
@@ -99,6 +109,7 @@ name = "Verilog"
 extensions = ["v", "vh", "sv", "svh"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages.disambiguation]]
 regex = "^\\s*endmodule\\b"
@@ -117,18 +128,21 @@ name = "WebAssembly Interface Type"
 extensions = ["wit"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "WGSL"
 extensions = ["wgsl"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "Windows Resource File"
 extensions = ["rc"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Zig"

@@ -15,6 +15,7 @@ name = "Bicep"
 extensions = ["bicep","bicepparam"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "CSON"
@@ -51,6 +52,7 @@ name = "INI"
 extensions = ["buildozer.spec","editorconfig","ini","lektorproject","prefs"]
 line_comments = [";"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "InstallShield"
@@ -63,6 +65,7 @@ name = "JSON5"
 extensions = ["json5"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Jam"
@@ -141,6 +144,7 @@ name = "Prisma Schema"
 extensions = ["prisma"]
 line_comments = ["//"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Properties"
@@ -207,6 +211,7 @@ name = "VSCode Workspace"
 extensions = ["code-workspace"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "Yarn"

@@ -153,6 +153,7 @@ name = "SVG"
 extensions = ["SVG","svg"]
 line_comments = []
 block_comments = [["<!--","-->"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "Slim"

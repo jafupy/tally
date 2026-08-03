@@ -44,7 +44,17 @@ struct Language {
     line_comments: Vec<String>,
     block_comments: Vec<[String; 2]>,
     #[serde(default)]
+    quotes: Vec<Quote>,
+    #[serde(default)]
     disambiguation: Vec<Disambiguation>,
+}
+
+#[derive(Deserialize)]
+struct Quote {
+    start: String,
+    end: String,
+    #[serde(default)]
+    escape: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -105,6 +115,71 @@ fn main() {
             generated.push_str(&format!("({start:?}, {end:?}),"));
         }
         generated.push_str("],\n");
+
+        generated.push_str("        quotes: &[");
+        for quote in &language.quotes {
+            let escape = quote.escape.as_deref().map(|escape| {
+                let bytes = escape.as_bytes();
+                assert!(
+                    bytes.len() == 1,
+                    "quote escape must be one byte for {}",
+                    language.name
+                );
+                bytes[0]
+            });
+            generated.push_str(&format!(
+                "QuoteDef {{ start: {:?}, end: {:?}, escape: {:?} }},",
+                quote.start, quote.end, escape
+            ));
+        }
+        generated.push_str("],\n");
+
+        let comment_candidates = candidate_bytes(
+            language
+                .line_comments
+                .iter()
+                .map(String::as_str)
+                .chain(language.block_comments.iter().map(|pair| pair[0].as_str())),
+        );
+        let block_candidates =
+            candidate_bytes(language.block_comments.iter().map(|pair| pair[0].as_str()));
+        let quote_candidates =
+            candidate_bytes(language.quotes.iter().map(|quote| quote.start.as_str()));
+        let max_delimiter_len = language
+            .line_comments
+            .iter()
+            .map(String::len)
+            .chain(
+                language
+                    .block_comments
+                    .iter()
+                    .flat_map(|pair| [pair[0].len(), pair[1].len()]),
+            )
+            .chain(
+                language
+                    .quotes
+                    .iter()
+                    .flat_map(|quote| [quote.start.len(), quote.end.len()]),
+            )
+            .max()
+            .unwrap_or(1)
+            .max(2);
+
+        generated.push_str(&format!(
+            "        comment_candidates: &{:?},\n",
+            comment_candidates
+        ));
+        generated.push_str(&format!(
+            "        block_candidates: &{:?},\n",
+            block_candidates
+        ));
+        generated.push_str(&format!(
+            "        quote_candidates: &{:?},\n",
+            quote_candidates
+        ));
+        generated.push_str(&format!(
+            "        max_delimiter_len: {max_delimiter_len},\n"
+        ));
         generated.push_str("    },\n");
     }
     generated.push_str("];\n\n");
@@ -211,4 +286,15 @@ fn load_languages() -> LanguagesConfig {
     }
 
     LanguagesConfig { languages }
+}
+
+fn candidate_bytes<'a>(tokens: impl Iterator<Item = &'a str>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for byte in tokens.filter_map(|token| token.as_bytes().first().copied()) {
+        if !bytes.contains(&byte) {
+            bytes.push(byte);
+        }
+    }
+    bytes.sort_unstable();
+    bytes
 }
