@@ -39,20 +39,18 @@ pub fn detect_path(path: &Path, contents_prefix: Option<&str>) -> Option<Languag
         return Some(language_id);
     }
 
-    if let Some(language_id) = contents_prefix.and_then(detect_shebang) {
-        return Some(language_id);
-    }
-
-    let extension = path.extension()?.to_str()?;
-    let candidates = extension_languages(extension);
-
-    match candidates {
-        [] => None,
-        [language_id] => Some(*language_id),
-        candidates => {
-            disambiguate(candidates, contents_prefix).or_else(|| candidates.first().copied())
+    if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
+        let candidates = extension_languages(extension);
+        if !candidates.is_empty() {
+            return match candidates {
+                [language_id] => Some(*language_id),
+                candidates => disambiguate(candidates, contents_prefix)
+                    .or_else(|| candidates.first().copied()),
+            };
         }
     }
+
+    contents_prefix.and_then(detect_shebang)
 }
 
 fn cmp_ignore_ascii_case(left: &str, right: &str) -> Ordering {
@@ -70,25 +68,33 @@ fn cmp_ignore_ascii_case(left: &str, right: &str) -> Ordering {
 }
 
 fn detect_shebang(contents: &str) -> Option<LanguageId> {
-    if !contents.as_bytes().starts_with(b"#!") {
-        return None;
-    }
-
     let line = contents
         .split_once('\n')
         .map_or(contents, |(line, _)| line)
-        .strip_prefix("#!")?;
+        .strip_prefix("#!")?
+        .trim_start();
+    let mut words = line.split_ascii_whitespace();
+    let executable = words.next()?;
 
-    if line.contains("python") {
+    if !executable.starts_with('/') {
+        return None;
+    }
+
+    let mut interpreter = Path::new(executable).file_name()?.to_str()?;
+    if interpreter == "env" {
+        interpreter = words.find(|word| !word.starts_with('-') && !word.contains('='))?;
+        interpreter = Path::new(interpreter).file_name()?.to_str()?;
+    }
+
+    if interpreter.starts_with("python") || interpreter.starts_with("pypy") {
         return language_named("Python");
     }
 
-    if line.contains("node") || line.contains("deno") || line.contains("bun") {
+    if matches!(interpreter, "node" | "nodejs" | "deno" | "bun") {
         return language_named("JavaScript");
     }
 
-    if line.contains("sh") || line.contains("bash") || line.contains("zsh") || line.contains("ksh")
-    {
+    if matches!(interpreter, "sh" | "bash" | "zsh" | "ksh" | "dash") {
         return language_named("Shell");
     }
 
