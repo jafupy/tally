@@ -180,8 +180,11 @@ fn count_line<'a>(
     }
 
     if block_comment.is_some() {
-        stats.comments += 1;
-        update_block_comment(trimmed, language, block_comment);
+        if update_block_comment(trimmed, language, block_comment) {
+            stats.code += 1;
+        } else {
+            stats.comments += 1;
+        }
         return;
     }
 
@@ -198,9 +201,12 @@ fn count_line<'a>(
         let start = start.as_bytes();
 
         if trimmed.starts_with(start) {
-            stats.comments += 1;
             *block_comment = Some(end);
-            update_block_comment(&trimmed[start.len()..], language, block_comment);
+            if update_block_comment(&trimmed[start.len()..], language, block_comment) {
+                stats.code += 1;
+            } else {
+                stats.comments += 1;
+            }
             return;
         }
     }
@@ -299,25 +305,37 @@ fn update_block_comment<'a>(
     mut remainder: &[u8],
     language: &'a LanguageDef,
     block_comment: &mut Option<&'a str>,
-) {
+) -> bool {
     loop {
         if let Some(end) = *block_comment {
             let Some(end_at) = find_bytes(remainder, end.as_bytes()) else {
-                return;
+                return false;
             };
             remainder = trim_start_ascii(&remainder[end_at + end.len()..]);
             *block_comment = None;
         }
 
-        let Some(&(start, end)) = language
+        if remainder.is_empty()
+            || language
+                .line_comments
+                .iter()
+                .any(|comment| remainder.starts_with(comment.as_bytes()))
+        {
+            return false;
+        }
+
+        if let Some(&(start, end)) = language
             .block_comments
             .iter()
             .find(|(start, _)| remainder.starts_with(start.as_bytes()))
-        else {
-            return;
-        };
-        remainder = &remainder[start.len()..];
-        *block_comment = Some(end);
+        {
+            remainder = &remainder[start.len()..];
+            *block_comment = Some(end);
+            continue;
+        }
+
+        track_block_comment_after_code(remainder, language, block_comment);
+        return true;
     }
 }
 
