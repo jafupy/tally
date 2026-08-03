@@ -148,6 +148,7 @@ fn scan_result(failed: bool) -> io::Result<()> {
 fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
     let mut builder = WalkBuilder::new(path);
     builder
+        .hidden(false)
         .git_ignore(ignore_git)
         .git_global(ignore_git)
         .git_exclude(ignore_git)
