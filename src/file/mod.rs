@@ -91,6 +91,7 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
     };
     let mut block_comment: Option<&str> = None;
     let mut partial_line = Vec::new();
+    let slash_block_comments = language.block_comments == [("/*", "*/")];
 
     loop {
         let consumed = {
@@ -99,20 +100,45 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
                 break;
             }
             let mut start = 0;
+            let mut next_block = slash_block_comments
+                .then(|| memmem::find(buffer, b"/*"))
+                .flatten();
 
             while let Some(relative_end) = memchr(b'\n', &buffer[start..]) {
                 let end = start + relative_end + 1;
                 let line = &buffer[start..end];
 
+                let may_open_block = if slash_block_comments {
+                    next_block.is_some_and(|at| at < end)
+                } else {
+                    !language.block_comments.is_empty()
+                };
+
                 if partial_line.is_empty() {
-                    count_line(line, language, &mut block_comment, &mut stats);
+                    count_line(
+                        line,
+                        language,
+                        &mut block_comment,
+                        &mut stats,
+                        may_open_block,
+                    );
                 } else {
                     partial_line.extend_from_slice(line);
-                    count_line(&partial_line, language, &mut block_comment, &mut stats);
+                    count_line(
+                        &partial_line,
+                        language,
+                        &mut block_comment,
+                        &mut stats,
+                        true,
+                    );
                     partial_line.clear();
                 }
 
                 start = end;
+                if slash_block_comments && next_block.is_some_and(|at| at < end) {
+                    next_block = memmem::find(&buffer[start..], b"/*")
+                        .map(|relative_at| start + relative_at);
+                }
             }
 
             if start < buffer.len() {
@@ -126,7 +152,13 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
     }
 
     if !partial_line.is_empty() {
-        count_line(&partial_line, language, &mut block_comment, &mut stats);
+        count_line(
+            &partial_line,
+            language,
+            &mut block_comment,
+            &mut stats,
+            true,
+        );
     }
 
     Ok(stats)
@@ -137,6 +169,7 @@ fn count_line<'a>(
     language: &'a LanguageDef,
     block_comment: &mut Option<&'a str>,
     stats: &mut Stats,
+    may_open_block: bool,
 ) {
     stats.lines += 1;
     let trimmed = trim_start_ascii(line);
@@ -173,6 +206,93 @@ fn count_line<'a>(
     }
 
     stats.code += 1;
+    if may_open_block {
+        track_block_comment_after_code(trimmed, language, block_comment);
+    }
+}
+
+fn track_block_comment_after_code<'a>(
+    line: &[u8],
+    language: &'a LanguageDef,
+    block_comment: &mut Option<&'a str>,
+) {
+    if language.block_comments == [("/*", "*/")] {
+        track_slash_block_comment_after_code(line, block_comment);
+        return;
+    }
+
+    for &(start, end) in language.block_comments {
+        let mut offset = 0;
+        while let Some(relative_at) = memmem::find(&line[offset..], start.as_bytes()) {
+            let at = offset + relative_at;
+            if at > 0 && !line[at - 1].is_ascii_whitespace() {
+                offset = at + start.len();
+                continue;
+            }
+
+            let remainder = &line[at + start.len()..];
+            if let Some(end_at) = memmem::find(remainder, end.as_bytes()) {
+                offset = at + start.len() + end_at + end.len();
+            } else {
+                *block_comment = Some(end);
+                return;
+            }
+        }
+    }
+}
+
+fn track_slash_block_comment_after_code<'a>(line: &[u8], block_comment: &mut Option<&'a str>) {
+    let Some(mut position) = memchr(b'/', line) else {
+        return;
+    };
+    let mut quote = None;
+    let mut escaped = false;
+    let mut index = 0;
+
+    while index < line.len() {
+        let byte = line[index];
+        if let Some(active_quote) = quote {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == active_quote {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+
+        if matches!(byte, b'"' | b'\'' | b'`') {
+            quote = Some(byte);
+            index += 1;
+            continue;
+        }
+
+        if index < position {
+            index += 1;
+            continue;
+        }
+
+        if byte == b'/' && index + 1 < line.len() {
+            match line[index + 1] {
+                b'/' => return,
+                b'*' => {
+                    if let Some(end_at) = memmem::find(&line[index + 2..], b"*/") {
+                        index += end_at + 4;
+                        position = memchr(b'/', &line[index..])
+                            .map_or(line.len(), |relative| index + relative);
+                        continue;
+                    }
+                    *block_comment = Some("*/");
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+        index += 1;
+    }
 }
 
 fn update_block_comment<'a>(
