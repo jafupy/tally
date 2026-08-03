@@ -7,10 +7,22 @@ use std::sync::OnceLock;
 pub struct LanguageId(pub usize);
 
 #[derive(Debug)]
+pub struct QuoteDef {
+    pub start: &'static str,
+    pub end: &'static str,
+    pub escape: Option<u8>,
+}
+
+#[derive(Debug)]
 pub struct LanguageDef {
     pub name: &'static str,
     pub line_comments: &'static [&'static str],
     pub block_comments: &'static [(&'static str, &'static str)],
+    pub quotes: &'static [QuoteDef],
+    pub comment_candidates: &'static [u8],
+    pub block_candidates: &'static [u8],
+    pub quote_candidates: &'static [u8],
+    pub max_delimiter_len: usize,
 }
 
 #[derive(Debug)]
