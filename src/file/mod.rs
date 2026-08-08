@@ -1,10 +1,10 @@
 mod sink;
 
 use crate::language::{self, LanguageDef, LanguageId, QuoteDef};
-use memchr::{memchr, memchr2, memchr3, memmem};
+use memchr::{memchr, memchr_iter, memchr2, memchr3, memmem};
 pub use sink::{Batch, Sink, Stats, Summary};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, Read};
 use std::path::Path;
 
 const BUFFER_BYTES: usize = 64 * 1024;
@@ -32,7 +32,16 @@ pub enum FileStats {
 }
 
 pub fn parse_file(path: &Path, verbose: bool) -> io::Result<Option<FileStats>> {
-    let mut reader = open(path)?;
+    let mut buffer = vec![0; BUFFER_BYTES];
+    parse_file_buffered(path, verbose, &mut buffer)
+}
+
+pub fn parse_file_buffered(
+    path: &Path,
+    verbose: bool,
+    buffer: &mut [u8],
+) -> io::Result<Option<FileStats>> {
+    let mut reader = ReusableBufReader::new(File::open(path)?, buffer);
 
     let language_id = {
         let prefix = read_prefix(&mut reader)?;
@@ -80,8 +89,51 @@ fn unknown_format(path: &Path) -> Option<String> {
         .map(|filename| filename.to_owned())
 }
 
-fn open(path: &Path) -> io::Result<BufReader<File>> {
-    File::open(path).map(|file| BufReader::with_capacity(BUFFER_BYTES, file))
+pub fn read_buffer() -> Vec<u8> {
+    vec![0; BUFFER_BYTES]
+}
+
+struct ReusableBufReader<'a> {
+    file: File,
+    buffer: &'a mut [u8],
+    position: usize,
+    filled: usize,
+}
+
+impl<'a> ReusableBufReader<'a> {
+    fn new(file: File, buffer: &'a mut [u8]) -> Self {
+        debug_assert!(buffer.len() >= BUFFER_BYTES);
+        Self {
+            file,
+            buffer: &mut buffer[..BUFFER_BYTES],
+            position: 0,
+            filled: 0,
+        }
+    }
+}
+
+impl Read for ReusableBufReader<'_> {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        let available = self.fill_buf()?;
+        let amount = available.len().min(output.len());
+        output[..amount].copy_from_slice(&available[..amount]);
+        self.consume(amount);
+        Ok(amount)
+    }
+}
+
+impl BufRead for ReusableBufReader<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        if self.position == self.filled {
+            self.filled = self.file.read(self.buffer)?;
+            self.position = 0;
+        }
+        Ok(&self.buffer[self.position..self.filled])
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.position = (self.position + amount).min(self.filled);
+    }
 }
 
 fn read_prefix(reader: &mut impl BufRead) -> io::Result<&[u8]> {
@@ -90,6 +142,10 @@ fn read_prefix(reader: &mut impl BufRead) -> io::Result<&[u8]> {
 }
 
 fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<Stats> {
+    if language.line_comments.is_empty() && language.block_comments.is_empty() {
+        return count_plain_lines(reader);
+    }
+
     let syntax = Syntax::new(language);
     let mut stats = Stats {
         files: 1,
@@ -109,8 +165,8 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
             let mut start = 0;
             let mut next_block = syntax.find_block_start(buffer);
 
-            while let Some(relative_end) = memchr(b'\n', &buffer[start..]) {
-                let end = start + relative_end + 1;
+            for newline in memchr_iter(b'\n', buffer) {
+                let end = newline + 1;
                 let line = &buffer[start..end];
 
                 if let Some(mut state) = long_line.take() {
@@ -174,6 +230,57 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
     Ok(stats)
 }
 
+fn count_plain_lines(mut reader: impl BufRead) -> io::Result<Stats> {
+    let mut stats = Stats {
+        files: 1,
+        ..Stats::default()
+    };
+    let mut line_has_code = false;
+    let mut line_pending = false;
+
+    loop {
+        let consumed = {
+            let buffer = reader.fill_buf()?;
+            if buffer.is_empty() {
+                break;
+            }
+
+            let mut start = 0;
+            for end in memchr_iter(b'\n', buffer) {
+                line_has_code |= contains_non_whitespace(&buffer[start..end]);
+                stats.lines += 1;
+                if line_has_code {
+                    stats.code += 1;
+                } else {
+                    stats.blanks += 1;
+                }
+                line_has_code = false;
+                line_pending = false;
+                start = end + 1;
+            }
+
+            if start < buffer.len() {
+                line_has_code |= contains_non_whitespace(&buffer[start..]);
+                line_pending = true;
+            }
+
+            buffer.len()
+        };
+        reader.consume(consumed);
+    }
+
+    if line_pending {
+        stats.lines += 1;
+        if line_has_code {
+            stats.code += 1;
+        } else {
+            stats.blanks += 1;
+        }
+    }
+
+    Ok(stats)
+}
+
 struct Syntax<'a> {
     language: &'a LanguageDef,
     single_block_finder: Option<memmem::Finder<'a>>,
@@ -191,6 +298,7 @@ impl<'a> Syntax<'a> {
         }
     }
 
+    #[inline(always)]
     fn find_block_start(&self, bytes: &[u8]) -> Option<usize> {
         match self.language.block_comments {
             [] => None,
@@ -268,6 +376,7 @@ impl<'a> Syntax<'a> {
         None
     }
 
+    #[inline(always)]
     fn starts_line_comment(&self, bytes: &[u8]) -> bool {
         self.language
             .line_comments
@@ -275,6 +384,7 @@ impl<'a> Syntax<'a> {
             .any(|comment| bytes.starts_with(comment.as_bytes()))
     }
 
+    #[inline(always)]
     fn starts_block_comment(&self, bytes: &[u8]) -> bool {
         self.language
             .block_comments
@@ -296,6 +406,7 @@ struct LineState<'a> {
     in_line_comment: bool,
 }
 
+#[inline(always)]
 fn count_line<'a>(
     line: &[u8],
     syntax: &Syntax<'a>,
@@ -311,21 +422,26 @@ fn count_line<'a>(
         return;
     }
 
-    if block_comment.is_none() && syntax.starts_line_comment(trimmed) {
-        stats.comments += 1;
-        return;
-    }
+    if block_comment.is_none() {
+        if syntax.starts_line_comment(trimmed) {
+            stats.comments += 1;
+            return;
+        }
 
-    if block_comment.is_none() && !syntax.starts_block_comment(trimmed) {
-        stats.code += 1;
-        if may_open_block {
+        if !may_open_block {
+            stats.code += 1;
+            return;
+        }
+
+        if !syntax.starts_block_comment(trimmed) {
+            stats.code += 1;
             let mut state = LineState {
                 saw_code: true,
                 ..LineState::default()
             };
             scan_bytes(trimmed, trimmed.len(), syntax, block_comment, &mut state);
+            return;
         }
-        return;
     }
 
     let mut state = LineState::default();
@@ -563,6 +679,7 @@ fn apply_line_state(state: LineState<'_>, stats: &mut Stats) {
     }
 }
 
+#[inline(always)]
 fn trim_start_ascii(bytes: &[u8]) -> &[u8] {
     let mut start = 0;
     while start < bytes.len() && bytes[start].is_ascii_whitespace() {

@@ -240,7 +240,7 @@ fn main() {
     generated.push_str("}\n\n");
 
     generated.push_str("pub const EXTENSION_LANGUAGES: &[(&str, &[LanguageId])] = &[\n");
-    for (extension, language_ids) in extensions {
+    for (extension, language_ids) in &extensions {
         generated.push_str(&format!("    ({extension:?}, &["));
         for language_id in language_ids {
             generated.push_str(&format!("LanguageId({language_id}),"));
@@ -250,11 +250,18 @@ fn main() {
     generated.push_str("];\n\n");
 
     generated.push_str("pub fn extension_languages(extension: &str) -> &'static [LanguageId] {\n");
-    generated.push_str(
-        "    match EXTENSION_LANGUAGES.binary_search_by(|(candidate, _)| cmp_ignore_ascii_case(candidate, extension)) {\n",
-    );
-    generated.push_str("        Ok(index) => EXTENSION_LANGUAGES[index].1,\n");
-    generated.push_str("        Err(_) => &[],\n");
+    generated.push_str("    match extension {\n");
+    for (extension, language_ids) in &extensions {
+        generated.push_str(&format!("        {extension:?} => &["));
+        for language_id in language_ids {
+            generated.push_str(&format!("LanguageId({language_id}),"));
+        }
+        generated.push_str("],\n");
+    }
+    generated.push_str("        _ => match EXTENSION_LANGUAGES.binary_search_by(|(candidate, _)| cmp_ignore_ascii_case(candidate, extension)) {\n");
+    generated.push_str("            Ok(index) => EXTENSION_LANGUAGES[index].1,\n");
+    generated.push_str("            Err(_) => &[],\n");
+    generated.push_str("        },\n");
     generated.push_str("    }\n");
     generated.push_str("}\n");
 
