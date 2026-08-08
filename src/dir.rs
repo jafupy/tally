@@ -49,6 +49,7 @@ pub fn scan_directory(
             batch: Batch::default(),
             verbose,
             failed: Arc::clone(&failed),
+            buffer: file::read_buffer(),
         };
 
         Box::new(move |entry| worker.visit(entry))
@@ -92,10 +93,11 @@ fn probe_small_directory(path: &Path, ignore_git: bool) -> DirectoryProbe {
 
 fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) -> bool {
     let mut batch = Batch::default();
+    let mut buffer = file::read_buffer();
     let mut succeeded = true;
 
     for path in files {
-        match file::parse_file(&path, verbose) {
+        match file::parse_file_buffered(&path, verbose, &mut buffer) {
             Ok(Some(stats)) => batch.add(stats),
             Ok(None) => continue,
             Err(error) => {
@@ -129,6 +131,7 @@ fn scan_directory_serial(
         batch: Batch::default(),
         verbose,
         failed: Arc::clone(&failed),
+        buffer: file::read_buffer(),
     };
 
     for entry in walk_builder(path, ignore_git).build() {
@@ -162,6 +165,7 @@ struct ScanWorker {
     batch: Batch,
     verbose: bool,
     failed: Arc<AtomicBool>,
+    buffer: Vec<u8>,
 }
 
 impl ScanWorker {
@@ -179,7 +183,7 @@ impl ScanWorker {
             return WalkState::Continue;
         }
 
-        match file::parse_file(entry.path(), self.verbose) {
+        match file::parse_file_buffered(entry.path(), self.verbose, &mut self.buffer) {
             Ok(Some(stats)) => {
                 self.batch.add(stats);
                 if self.batch.files() >= FLUSH_EVERY_FILES {
