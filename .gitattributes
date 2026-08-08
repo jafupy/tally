@@ -2,3 +2,4 @@
 # installer site are support data, not implementation-language source.
 data/** linguist-detectable=false
 site/** linguist-detectable=false
+benchmarks/** linguist-detectable=false
