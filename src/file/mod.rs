@@ -152,6 +152,7 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
         ..Stats::default()
     };
     let mut block_comment: Option<&str> = None;
+    let mut multiline_quote: Option<&QuoteDef> = None;
     let mut partial_line = Vec::new();
     let mut long_line: Option<StreamingLine<'_>> = None;
 
@@ -171,24 +172,32 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
 
                 if let Some(mut state) = long_line.take() {
                     state.push(line, &mut block_comment);
-                    state.finish(&mut block_comment, &mut stats);
+                    state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
                 } else if partial_line.is_empty() {
                     count_line(
                         line,
                         &syntax,
                         &mut block_comment,
+                        &mut multiline_quote,
                         &mut stats,
                         next_block.is_some_and(|at| at < end),
                     );
                 } else if partial_line.len() + line.len() <= BUFFER_BYTES {
                     partial_line.extend_from_slice(line);
-                    count_line(&partial_line, &syntax, &mut block_comment, &mut stats, true);
+                    count_line(
+                        &partial_line,
+                        &syntax,
+                        &mut block_comment,
+                        &mut multiline_quote,
+                        &mut stats,
+                        true,
+                    );
                     partial_line.clear();
                 } else {
-                    let mut state = StreamingLine::new(&syntax);
+                    let mut state = StreamingLine::new(&syntax, multiline_quote);
                     state.push(&partial_line, &mut block_comment);
                     state.push(line, &mut block_comment);
-                    state.finish(&mut block_comment, &mut stats);
+                    state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
                     partial_line.clear();
                 }
 
@@ -207,7 +216,7 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
                 } else if partial_line.len() + fragment.len() <= BUFFER_BYTES {
                     partial_line.extend_from_slice(fragment);
                 } else {
-                    let mut state = StreamingLine::new(&syntax);
+                    let mut state = StreamingLine::new(&syntax, multiline_quote);
                     state.push(&partial_line, &mut block_comment);
                     state.push(fragment, &mut block_comment);
                     partial_line.clear();
@@ -222,9 +231,16 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
     }
 
     if let Some(state) = long_line {
-        state.finish(&mut block_comment, &mut stats);
+        state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
     } else if !partial_line.is_empty() {
-        count_line(&partial_line, &syntax, &mut block_comment, &mut stats, true);
+        count_line(
+            &partial_line,
+            &syntax,
+            &mut block_comment,
+            &mut multiline_quote,
+            &mut stats,
+            true,
+        );
     }
 
     Ok(stats)
@@ -411,24 +427,25 @@ fn count_line<'a>(
     line: &[u8],
     syntax: &Syntax<'a>,
     block_comment: &mut Option<&'a str>,
+    multiline_quote: &mut Option<&'a QuoteDef>,
     stats: &mut Stats,
     may_open_block: bool,
 ) {
     stats.lines += 1;
     let trimmed = trim_start_ascii(line);
 
-    if trimmed.is_empty() {
+    if trimmed.is_empty() && multiline_quote.is_none() {
         stats.blanks += 1;
         return;
     }
 
-    if block_comment.is_none() {
+    if block_comment.is_none() && multiline_quote.is_none() {
         if syntax.starts_line_comment(trimmed) {
             stats.comments += 1;
             return;
         }
 
-        if !may_open_block {
+        if !may_open_block && !syntax.language.quotes.iter().any(|quote| quote.multiline) {
             stats.code += 1;
             return;
         }
@@ -440,12 +457,17 @@ fn count_line<'a>(
                 ..LineState::default()
             };
             scan_bytes(trimmed, trimmed.len(), syntax, block_comment, &mut state);
+            *multiline_quote = state.quote.filter(|quote| quote.multiline);
             return;
         }
     }
 
-    let mut state = LineState::default();
+    let mut state = LineState {
+        quote: *multiline_quote,
+        ..LineState::default()
+    };
     scan_bytes(trimmed, trimmed.len(), syntax, block_comment, &mut state);
+    *multiline_quote = state.quote.filter(|quote| quote.multiline);
     apply_line_state(state, stats);
 }
 
@@ -488,21 +510,13 @@ fn scan_bytes<'a>(
             }
         }
 
-        let Some((comment_at, comment)) = syntax.find_comment_start(remainder) else {
-            if contains_non_whitespace(&remainder[..process_until - position]) {
-                state.saw_code = true;
-            }
-            return process_until;
-        };
+        let comment = syntax.find_comment_start(remainder);
+        let comment_at = comment
+            .as_ref()
+            .map_or(process_until - position, |(at, _)| *at);
+        let scan_until = comment_at.min(process_until - position);
 
-        if position + comment_at >= process_until {
-            if contains_non_whitespace(&remainder[..process_until - position]) {
-                state.saw_code = true;
-            }
-            return process_until;
-        }
-
-        if let Some((quote_at, quote)) = syntax.find_quote_start(&remainder[..comment_at]) {
+        if let Some((quote_at, quote)) = syntax.find_quote_start(&remainder[..scan_until]) {
             if contains_non_whitespace(&remainder[..quote_at]) {
                 state.saw_code = true;
             }
@@ -511,6 +525,20 @@ fn scan_bytes<'a>(
             state.quote = Some(quote);
             continue;
         }
+
+        if position + comment_at >= process_until {
+            if contains_non_whitespace(&remainder[..process_until - position]) {
+                state.saw_code = true;
+            }
+            return process_until;
+        }
+
+        let Some((_, comment)) = comment else {
+            if contains_non_whitespace(&remainder[..process_until - position]) {
+                state.saw_code = true;
+            }
+            return process_until;
+        };
 
         if contains_non_whitespace(&remainder[..comment_at]) {
             state.saw_code = true;
@@ -618,11 +646,14 @@ struct StreamingLine<'a> {
 }
 
 impl<'a> StreamingLine<'a> {
-    fn new(syntax: &'a Syntax<'a>) -> Self {
+    fn new(syntax: &'a Syntax<'a>, multiline_quote: Option<&'a QuoteDef>) -> Self {
         Self {
             syntax,
             pending: Vec::with_capacity(BUFFER_BYTES),
-            state: LineState::default(),
+            state: LineState {
+                quote: multiline_quote,
+                ..LineState::default()
+            },
         }
     }
 
@@ -644,7 +675,12 @@ impl<'a> StreamingLine<'a> {
         self.discard(consumed);
     }
 
-    fn finish(mut self, block_comment: &mut Option<&'a str>, stats: &mut Stats) {
+    fn finish(
+        mut self,
+        block_comment: &mut Option<&'a str>,
+        multiline_quote: &mut Option<&'a QuoteDef>,
+        stats: &mut Stats,
+    ) {
         if !self.state.in_line_comment {
             let len = self.pending.len();
             scan_bytes(
@@ -656,6 +692,7 @@ impl<'a> StreamingLine<'a> {
             );
         }
         stats.lines += 1;
+        *multiline_quote = self.state.quote.filter(|quote| quote.multiline);
         apply_line_state(self.state, stats);
     }
 
@@ -769,6 +806,55 @@ mod tests {
         assert_eq!(stats.lines, 4);
         assert_eq!(stats.comments, 4);
         assert_eq!(stats.code, 0);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn ignores_comment_delimiters_inside_multiline_quotes() {
+        for extension in ["js", "ts", "svelte", "vue", "astro", "go"] {
+            let path = temp_file(
+                &format!("multiline-template.{extension}"),
+                b"const x = `\nhello /* not a comment\nstill string\n`;\nfoo();\n",
+            );
+            let Ok(Some(FileStats::Known { language_id, stats })) = parse_file(&path, false) else {
+                panic!("expected known file stats for .{extension}");
+            };
+
+            assert_eq!(
+                language::get(language_id).name,
+                match extension {
+                    "js" => "JavaScript",
+                    "ts" => "TypeScript",
+                    "svelte" => "Svelte",
+                    "vue" => "Vuejs Component",
+                    "astro" => "Astro",
+                    "go" => "Go",
+                    _ => unreachable!(),
+                }
+            );
+            assert_eq!(stats.lines, 5, ".{extension}");
+            assert_eq!(stats.comments, 0, ".{extension}");
+            assert_eq!(stats.code, 5, ".{extension}");
+
+            fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn ignores_comment_delimiters_inside_multiline_quotes_across_buffers() {
+        let contents = format!(
+            "const x = `{}\n/* not a comment\nstill string\n`;\nfoo();\n",
+            "x".repeat(BUFFER_BYTES)
+        );
+        let path = temp_file("long-multiline-template.js", contents.as_bytes());
+        let Ok(Some(FileStats::Known { stats, .. })) = parse_file(&path, false) else {
+            panic!("expected JavaScript file stats");
+        };
+
+        assert_eq!(stats.lines, 5);
+        assert_eq!(stats.comments, 0);
+        assert_eq!(stats.code, 5);
 
         fs::remove_file(path).unwrap();
     }
