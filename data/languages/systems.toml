@@ -36,7 +36,7 @@ name = "Go"
 extensions = ["go"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
-quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "HLSL"

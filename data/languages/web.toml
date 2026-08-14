@@ -3,7 +3,7 @@ name = "Astro"
 extensions = ["astro"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"], ["<!--", "-->"]]
-quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "CoffeeScript"
@@ -37,7 +37,7 @@ name = "JavaScript"
 extensions = ["js", "mjs", "cjs", "jsx"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
-quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "Less"
@@ -72,18 +72,18 @@ name = "Svelte"
 extensions = ["svelte"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"], ["<!--", "-->"]]
-quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "TypeScript"
 extensions = ["ts", "tsx"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
-quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "Vue"
 extensions = ["vue"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"], ["<!--", "-->"]]
-quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]

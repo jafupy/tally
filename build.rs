@@ -55,6 +55,8 @@ struct Quote {
     end: String,
     #[serde(default)]
     escape: Option<String>,
+    #[serde(default)]
+    multiline: bool,
 }
 
 #[derive(Deserialize)]
@@ -128,8 +130,8 @@ fn main() {
                 bytes[0]
             });
             generated.push_str(&format!(
-                "QuoteDef {{ start: {:?}, end: {:?}, escape: {:?} }},",
-                quote.start, quote.end, escape
+                "QuoteDef {{ start: {:?}, end: {:?}, escape: {:?}, multiline: {:?} }},",
+                quote.start, quote.end, escape, quote.multiline
             ));
         }
         generated.push_str("],\n");

@@ -11,6 +11,7 @@ pub struct QuoteDef {
     pub start: &'static str,
     pub end: &'static str,
     pub escape: Option<u8>,
+    pub multiline: bool,
 }
 
 #[derive(Debug)]
