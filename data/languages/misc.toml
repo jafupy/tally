@@ -3,12 +3,14 @@ name = "Bash"
 extensions = ["bash"]
 line_comments = ["#"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
 
 [[languages]]
 name = "C#"
 extensions = ["cs"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Clojure"
@@ -21,6 +23,7 @@ name = "Dart"
 extensions = ["dart"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Elixir"
@@ -63,6 +66,7 @@ name = "Groovy"
 extensions = ["groovy", "gradle"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Haskell"
@@ -75,6 +79,7 @@ name = "Java"
 extensions = ["java"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Julia"
@@ -87,6 +92,7 @@ name = "Kotlin"
 extensions = ["kt", "kts"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Lisp"
@@ -135,12 +141,14 @@ name = "PowerShell"
 extensions = ["ps1", "psm1", "psd1"]
 line_comments = ["#"]
 block_comments = [["<#", "#>"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Python"
 extensions = ["py", "pyw", "pyi"]
 line_comments = ["#"]
 block_comments = [["\"\"\"", "\"\"\""], ["'''", "'''"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "R"
@@ -153,15 +161,18 @@ name = "Ruby"
 extensions = ["rb", "rake", "gemspec"]
 line_comments = ["#"]
 block_comments = [["=begin", "=end"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Scala"
 extensions = ["scala", "sc"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Shell"
 extensions = ["sh", "zsh", "ksh"]
 line_comments = ["#"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]

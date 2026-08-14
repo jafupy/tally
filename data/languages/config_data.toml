@@ -15,6 +15,7 @@ name = "Dockerfile"
 extensions = ["dockerfile"]
 line_comments = ["#"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "GraphQL"
@@ -27,6 +28,7 @@ name = "HCL"
 extensions = ["hcl", "tf", "tfvars"]
 line_comments = ["#", "//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Inno Setup"
@@ -39,6 +41,7 @@ name = "JSON"
 extensions = ["json", "jsonc", "json5"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "Makefile"
@@ -51,33 +54,39 @@ name = "Nix"
 extensions = ["nix"]
 line_comments = ["#"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Property List"
 extensions = ["plist", "entitlements", "provisionprofile"]
 line_comments = []
 block_comments = [["<!--", "-->"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "Protocol Buffers"
 extensions = ["proto"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "SQL"
 extensions = ["sql"]
 line_comments = ["--"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "TOML"
 extensions = ["toml"]
 line_comments = ["#"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "YAML"
 extensions = ["yml", "yaml"]
 line_comments = ["#"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
