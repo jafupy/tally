@@ -49,6 +49,7 @@ pub fn scan_directory(
             batch: Batch::default(),
             verbose,
             failed: Arc::clone(&failed),
+            buffer: file::read_buffer(),
         };
 
         Box::new(move |entry| worker.visit(entry))
@@ -92,10 +93,11 @@ fn probe_small_directory(path: &Path, ignore_git: bool) -> DirectoryProbe {
 
 fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) -> bool {
     let mut batch = Batch::default();
+    let mut buffer = file::read_buffer();
     let mut succeeded = true;
 
     for path in files {
-        match file::parse_file(&path, verbose) {
+        match file::parse_file_buffered(&path, verbose, &mut buffer) {
             Ok(Some(stats)) => batch.add(stats),
             Ok(None) => continue,
             Err(error) => {
@@ -129,6 +131,7 @@ fn scan_directory_serial(
         batch: Batch::default(),
         verbose,
         failed: Arc::clone(&failed),
+        buffer: file::read_buffer(),
     };
 
     for entry in walk_builder(path, ignore_git).build() {
@@ -148,6 +151,10 @@ fn scan_result(failed: bool) -> io::Result<()> {
 fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
     let mut builder = WalkBuilder::new(path);
     builder
+        .hidden(false)
+        .filter_entry(|entry| {
+            !entry.file_type().is_some_and(|kind| kind.is_dir()) || entry.file_name() != ".git"
+        })
         .git_ignore(ignore_git)
         .git_global(ignore_git)
         .git_exclude(ignore_git)
@@ -161,6 +168,7 @@ struct ScanWorker {
     batch: Batch,
     verbose: bool,
     failed: Arc<AtomicBool>,
+    buffer: Vec<u8>,
 }
 
 impl ScanWorker {
@@ -178,7 +186,7 @@ impl ScanWorker {
             return WalkState::Continue;
         }
 
-        match file::parse_file(entry.path(), self.verbose) {
+        match file::parse_file_buffered(entry.path(), self.verbose, &mut self.buffer) {
             Ok(Some(stats)) => {
                 self.batch.add(stats);
                 if self.batch.files() >= FLUSH_EVERY_FILES {
@@ -204,5 +212,42 @@ impl ScanWorker {
 impl Drop for ScanWorker {
     fn drop(&mut self) {
         self.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    #[test]
+    fn walks_hidden_entries_but_not_git_directories() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("tally-walk-{unique}"));
+        fs::create_dir_all(root.join(".git/objects")).unwrap();
+        fs::create_dir_all(root.join(".hidden")).unwrap();
+        fs::write(root.join(".dotfile"), b"dotfile").unwrap();
+        fs::write(root.join(".hidden/source.rs"), b"fn main() {}\n").unwrap();
+        fs::write(root.join(".git/config"), b"config").unwrap();
+        fs::write(root.join(".git/objects/data"), b"object").unwrap();
+
+        for ignore_git in [true, false] {
+            let paths = walk_builder(&root, ignore_git)
+                .build()
+                .map(|entry| entry.unwrap().into_path())
+                .collect::<Vec<_>>();
+
+            assert!(paths.contains(&root.join(".dotfile")));
+            assert!(paths.contains(&root.join(".hidden/source.rs")));
+            assert!(!paths.iter().any(|path| path.starts_with(root.join(".git"))));
+        }
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

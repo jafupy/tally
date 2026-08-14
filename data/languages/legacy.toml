@@ -15,6 +15,7 @@ name = "Batch"
 extensions = ["bat", "cmd"]
 line_comments = ["REM", "::"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
 
 [[languages]]
 name = "COBOL"
@@ -33,6 +34,7 @@ name = "Perl"
 extensions = ["pl", "pm", "t"]
 line_comments = ["#"]
 block_comments = []
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Tcl"

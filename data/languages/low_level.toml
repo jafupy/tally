@@ -33,6 +33,7 @@ name = "C/C++ Header"
 extensions = ["H","h","hh","hpp","hxx"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "C3"
@@ -177,6 +178,7 @@ name = "Objective-C++"
 extensions = ["mm"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Odin"
@@ -345,6 +347,7 @@ name = "Verilog-SystemVerilog"
 extensions = ["sv","svh"]
 line_comments = ["//"]
 block_comments = [["/*","*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "Vyper"

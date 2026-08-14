@@ -3,6 +3,7 @@ name = "Astro"
 extensions = ["astro"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"], ["<!--", "-->"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "CoffeeScript"
@@ -15,63 +16,74 @@ name = "CSS"
 extensions = ["css"]
 line_comments = []
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Handlebars"
 extensions = ["hbs"]
 line_comments = []
 block_comments = [["{{!", "}}"], ["{{!--", "--}}"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "HTML"
 extensions = ["html", "htm"]
 line_comments = []
 block_comments = [["<!--", "-->"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }]
 
 [[languages]]
 name = "JavaScript"
 extensions = ["js", "mjs", "cjs", "jsx"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "Less"
 extensions = ["less"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "PHP"
 extensions = ["php", "phtml", "php3", "php4", "php5"]
 line_comments = ["//", "#"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\" }]
 
 [[languages]]
 name = "Sass"
 extensions = ["sass"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "SCSS"
 extensions = ["scss"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }]
 
 [[languages]]
 name = "Svelte"
 extensions = ["svelte"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"], ["<!--", "-->"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "TypeScript"
 extensions = ["ts", "tsx"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
 
 [[languages]]
 name = "Vue"
 extensions = ["vue"]
 line_comments = ["//"]
 block_comments = [["/*", "*/"], ["<!--", "-->"]]
+quotes = [{ start = "\"", end = "\"", escape = "\\" }, { start = "'", end = "'", escape = "\\" }, { start = "`", end = "`", escape = "\\", multiline = true }]
