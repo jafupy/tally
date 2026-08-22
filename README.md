@@ -16,6 +16,16 @@ Total       16 2,407   403       6 1,998
 
 Use `tally --json .` to emit the same results as structured JSON.
 
+Limit a scan with repeatable glob filters, or ask git for the relevant files:
+
+```sh
+tally --include '*.rs' --exclude 'target/**' .
+tally --tracked .
+tally --diff main .  # +added/-deleted lines since main
+```
+
+Use `tally -` to count text read from standard input.
+
 ## Install
 
 ```sh

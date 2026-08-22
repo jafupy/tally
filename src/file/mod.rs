@@ -3,8 +3,9 @@ mod sink;
 use crate::language::{self, LanguageDef, LanguageId, QuoteDef};
 use memchr::{memchr, memchr_iter, memchr2, memchr3, memmem};
 pub use sink::{Batch, Sink, Stats, Summary};
+use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, BufRead, Read};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::Path;
 
 const BUFFER_BYTES: usize = 64 * 1024;
@@ -63,6 +64,72 @@ pub fn parse_file_buffered(
             Ok(Some(FileStats::Unknown { format, stats }))
         }
     }
+}
+
+pub fn parse_stdin(verbose: bool) -> io::Result<Option<FileStats>> {
+    let stdin = io::stdin();
+    parse_reader(
+        Path::new("-"),
+        verbose,
+        BufReader::with_capacity(BUFFER_BYTES, stdin.lock()),
+    )
+}
+
+fn parse_reader(
+    path: &Path,
+    verbose: bool,
+    mut reader: impl BufRead,
+) -> io::Result<Option<FileStats>> {
+    let language_id = {
+        let prefix = read_prefix(&mut reader)?;
+        let Some(contents_prefix) = text_prefix(prefix) else {
+            return Ok(None);
+        };
+        language::detect_path(path, Some(contents_prefix))
+    };
+
+    match language_id {
+        Some(language_id) => {
+            let stats = count_lines(reader, language::get(language_id))?;
+            Ok(Some(FileStats::Known { language_id, stats }))
+        }
+        None => {
+            let stats = count_lines(reader, &UNKNOWN)?;
+            let format = verbose.then(|| unknown_format(path)).flatten();
+            Ok(Some(FileStats::Unknown { format, stats }))
+        }
+    }
+}
+
+pub fn count_selected_contents(
+    path: &Path,
+    contents: &[u8],
+    selected: &HashSet<usize>,
+) -> Option<(Option<LanguageId>, Stats)> {
+    let prefix = &contents[..contents.len().min(DETECTION_PREFIX_BYTES)];
+    let contents_prefix = text_prefix(prefix)?;
+    let language_id = language::detect_path(path, Some(contents_prefix));
+    let language = language_id.map(language::get).unwrap_or(&UNKNOWN);
+    let syntax = Syntax::new(language);
+    let mut block_comment = None;
+    let mut multiline_quote = None;
+    let mut stats = Stats::default();
+
+    for (index, line) in contents.split_inclusive(|byte| *byte == b'\n').enumerate() {
+        let mut line_stats = Stats::default();
+        count_line(
+            line,
+            &syntax,
+            &mut block_comment,
+            &mut multiline_quote,
+            &mut line_stats,
+            syntax.find_block_start(line).is_some(),
+        );
+        if selected.contains(&(index + 1)) {
+            stats += line_stats;
+        }
+    }
+    Some((language_id, stats))
 }
 
 fn text_prefix(prefix: &[u8]) -> Option<&str> {

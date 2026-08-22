@@ -6,6 +6,8 @@ use crate::file::{Stats, Summary};
 pub use json::print_json;
 pub use table::{format_number, print_summary, print_unknown_formats};
 
+pub(crate) const DIM_STYLE: &str = "\x1b[2m";
+
 fn summary_rows(summary: &Summary) -> Vec<(&'static str, Stats)> {
     let mut rows = summary
         .languages

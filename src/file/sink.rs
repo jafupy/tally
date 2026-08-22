@@ -150,7 +150,7 @@ pub struct Summary {
     pub languages: Vec<(LanguageId, Stats)>,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, serde::Serialize)]
 pub struct Stats {
     pub files: u64,
     pub lines: u64,
