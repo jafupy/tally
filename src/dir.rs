@@ -1,14 +1,15 @@
 use crate::file::{self, Batch};
-use ignore::{DirEntry, Error, WalkBuilder, WalkState};
+use ignore::{DirEntry, Error, WalkBuilder, WalkParallel, WalkState};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
 const FLUSH_EVERY_FILES: u64 = 512;
 const ADAPTIVE_SMALL_FILE_LIMIT: usize = 128;
+const PATH_BATCH_SIZE: usize = 32;
 
 pub fn scan_directory(
     path: &Path,
@@ -19,17 +20,9 @@ pub fn scan_directory(
     verbose: bool,
 ) -> io::Result<()> {
     if adaptive_threads && threads > 1 {
-        match probe_small_directory(path, ignore_git) {
-            DirectoryProbe::Small { files, errors } => {
-                let mut failed = !errors.is_empty();
-                for err in errors {
-                    eprintln!("failed to read directory entry: {err}");
-                }
-                failed |= !scan_file_list(files, sink, verbose);
-                return scan_result(failed);
-            }
-            DirectoryProbe::Large => {}
-        }
+        let mut builder = walk_builder(path, ignore_git);
+        builder.threads(threads);
+        return scan_directory_adaptive(path, || builder.build_parallel(), sink, verbose);
     }
 
     if threads <= 1 {
@@ -57,38 +50,119 @@ pub fn scan_directory(
     scan_result(failed.load(Ordering::Relaxed))
 }
 
-enum DirectoryProbe {
-    Small {
-        files: Vec<PathBuf>,
-        errors: Vec<String>,
-    },
-    Large,
+fn scan_directory_adaptive(
+    root: &Path,
+    build_walker: impl FnOnce() -> WalkParallel,
+    sink: Arc<file::Sink>,
+    verbose: bool,
+) -> io::Result<()> {
+    let state = Arc::new(AdaptiveState {
+        large: AtomicBool::new(false),
+        pending: Mutex::new(Vec::new()),
+    });
+    let failed = Arc::new(AtomicBool::new(false));
+    let root = root.to_path_buf();
+    let walker = build_walker();
+
+    walker.run(|| {
+        let mut worker = AdaptiveWorker {
+            scan: ScanWorker {
+                root: root.clone(),
+                sink: Arc::clone(&sink),
+                batch: Batch::default(),
+                verbose,
+                failed: Arc::clone(&failed),
+                buffer: file::read_buffer(),
+            },
+            state: Arc::clone(&state),
+            pending: Vec::with_capacity(PATH_BATCH_SIZE),
+        };
+
+        Box::new(move |entry| worker.visit(entry))
+    });
+
+    let scan_failed = if state.large.load(Ordering::Acquire) {
+        false
+    } else {
+        let files = std::mem::take(&mut *state.pending.lock().unwrap());
+        !scan_file_list(files, sink, verbose)
+    };
+    scan_result(scan_failed || failed.load(Ordering::Relaxed))
 }
 
-fn probe_small_directory(path: &Path, ignore_git: bool) -> DirectoryProbe {
-    let mut files = Vec::new();
-    let mut errors = Vec::new();
+struct AdaptiveState {
+    large: AtomicBool,
+    pending: Mutex<Vec<PathBuf>>,
+}
 
-    for entry in walk_builder(path, ignore_git).build() {
+struct AdaptiveWorker {
+    scan: ScanWorker,
+    state: Arc<AdaptiveState>,
+    pending: Vec<PathBuf>,
+}
+
+impl AdaptiveWorker {
+    fn visit(&mut self, entry: Result<DirEntry, Error>) -> WalkState {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                errors.push(err.to_string());
-                continue;
+                eprintln!("failed to read directory entry: {err}");
+                self.scan.failed.store(true, Ordering::Relaxed);
+                return WalkState::Continue;
             }
         };
 
-        if entry.path() == path || !entry.file_type().is_some_and(|kind| kind.is_file()) {
-            continue;
+        if entry.path() == self.scan.root || !entry.file_type().is_some_and(|kind| kind.is_file()) {
+            return WalkState::Continue;
         }
 
-        files.push(entry.path().to_path_buf());
-        if files.len() > ADAPTIVE_SMALL_FILE_LIMIT {
-            return DirectoryProbe::Large;
+        if self.state.large.load(Ordering::Acquire) {
+            self.flush_pending();
+            self.scan.visit_path(entry.path());
+            return WalkState::Continue;
         }
+
+        self.pending.push(entry.into_path());
+        if self.pending.len() == PATH_BATCH_SIZE {
+            self.flush_pending();
+        }
+        WalkState::Continue
     }
 
-    DirectoryProbe::Small { files, errors }
+    fn flush_pending(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+
+        let mut pending = self.state.pending.lock().unwrap();
+        if self.state.large.load(Ordering::Relaxed) {
+            drop(pending);
+            for path in self.pending.drain(..) {
+                self.scan.visit_path(&path);
+            }
+            return;
+        }
+
+        pending.append(&mut self.pending);
+        if pending.len() > ADAPTIVE_SMALL_FILE_LIMIT {
+            self.state.large.store(true, Ordering::Release);
+        }
+    }
+}
+
+impl Drop for AdaptiveWorker {
+    fn drop(&mut self) {
+        self.flush_pending();
+        if !self.state.large.load(Ordering::Acquire) {
+            return;
+        }
+
+        loop {
+            let path = self.state.pending.lock().unwrap().pop();
+            let Some(path) = path else { break };
+            self.scan.visit_path(&path);
+        }
+    }
 }
 
 fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) -> bool {
@@ -186,7 +260,12 @@ impl ScanWorker {
             return WalkState::Continue;
         }
 
-        match file::parse_file_buffered(entry.path(), self.verbose, &mut self.buffer) {
+        self.visit_path(entry.path());
+        WalkState::Continue
+    }
+
+    fn visit_path(&mut self, path: &Path) {
+        match file::parse_file_buffered(path, self.verbose, &mut self.buffer) {
             Ok(Some(stats)) => {
                 self.batch.add(stats);
                 if self.batch.files() >= FLUSH_EVERY_FILES {
@@ -195,12 +274,10 @@ impl ScanWorker {
             }
             Ok(None) => {}
             Err(error) => {
-                eprintln!("failed to read file {}: {error}", entry.path().display());
+                eprintln!("failed to read file {}: {error}", path.display());
                 self.failed.store(true, Ordering::Relaxed);
             }
         }
-
-        WalkState::Continue
     }
 
     fn flush(&mut self) {
@@ -220,6 +297,7 @@ mod tests {
     use super::*;
     use std::{
         fs,
+        sync::atomic::AtomicUsize,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -247,6 +325,61 @@ mod tests {
             assert!(paths.contains(&root.join(".hidden/source.rs")));
             assert!(!paths.iter().any(|path| path.starts_with(root.join(".git"))));
         }
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn adaptive_handoff_processes_every_discovered_file_once() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("tally-adaptive-{unique}"));
+        fs::create_dir(&root).unwrap();
+        for index in 0..=ADAPTIVE_SMALL_FILE_LIMIT {
+            fs::write(root.join(format!("source.unique-{index}")), b"one line\n").unwrap();
+        }
+
+        let sink = file::Sink::new();
+
+        scan_directory(&root, Arc::clone(&sink), false, 4, true, true).unwrap();
+
+        let summary = sink.snapshot();
+        assert_eq!(summary.all.files, (ADAPTIVE_SMALL_FILE_LIMIT + 1) as u64);
+        assert_eq!(summary.unknown_formats.len(), ADAPTIVE_SMALL_FILE_LIMIT + 1);
+        assert!(summary.unknown_formats.iter().all(|(_, files)| *files == 1));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn adaptive_large_directory_consumes_one_walk() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("tally-single-walk-{unique}"));
+        fs::create_dir(&root).unwrap();
+        for index in 0..=ADAPTIVE_SMALL_FILE_LIMIT {
+            fs::write(root.join(format!("source-{index}.rs")), b"one line\n").unwrap();
+        }
+
+        let walker_builds = AtomicUsize::new(0);
+        scan_directory_adaptive(
+            &root,
+            || {
+                walker_builds.fetch_add(1, Ordering::Relaxed);
+                let mut builder = walk_builder(&root, false);
+                builder.threads(4);
+                builder.build_parallel()
+            },
+            file::Sink::new(),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(walker_builds.load(Ordering::Relaxed), 1);
 
         fs::remove_dir_all(root).unwrap();
     }
