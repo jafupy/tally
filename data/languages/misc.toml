@@ -1,4 +1,10 @@
 [[languages]]
+name = "Stdin"
+extensions = []
+line_comments = []
+block_comments = []
+
+[[languages]]
 name = "Bash"
 extensions = ["bash"]
 line_comments = ["#"]

@@ -81,22 +81,15 @@ fn print_header(output: &mut impl Write, widths: TableWidths, color: bool) -> io
 }
 
 fn print_separator(output: &mut impl Write, widths: TableWidths, color: bool) -> io::Result<()> {
-    let line = format!(
-        "{:-<name$} {:-<files$} {:-<lines$} {:-<blanks$} {:-<comments$} {:-<code$}",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        name = widths.name,
-        files = widths.files,
-        lines = widths.lines,
-        blanks = widths.blanks,
-        comments = widths.comments,
-        code = widths.code,
-    );
-    print_styled(output, &line, color, "\x1b[2m")
+    let width = widths.name
+        + widths.files
+        + widths.lines
+        + widths.blanks
+        + widths.comments
+        + widths.code
+        + 5;
+    let line = "─".repeat(width);
+    print_styled(output, &line, color, super::DIM_STYLE)
 }
 
 pub fn print_unknown_formats(summary: &Summary, color: bool) -> io::Result<()> {

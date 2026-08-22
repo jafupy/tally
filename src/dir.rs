@@ -1,5 +1,5 @@
 use crate::file::{self, Batch};
-use ignore::{DirEntry, Error, WalkBuilder, WalkParallel, WalkState};
+use ignore::{DirEntry, Error, WalkBuilder, WalkParallel, WalkState, overrides::Override};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -18,20 +18,21 @@ pub fn scan_directory(
     threads: usize,
     adaptive_threads: bool,
     verbose: bool,
+    overrides: Override,
 ) -> io::Result<()> {
     if adaptive_threads && threads > 1 {
-        let mut builder = walk_builder(path, ignore_git);
+        let mut builder = walk_builder(path, ignore_git, overrides);
         builder.threads(threads);
         return scan_directory_adaptive(path, || builder.build_parallel(), sink, verbose);
     }
 
     if threads <= 1 {
-        return scan_directory_serial(path, sink, ignore_git, verbose);
+        return scan_directory_serial(path, sink, ignore_git, verbose, overrides);
     }
 
     let root = path.to_path_buf();
     let failed = Arc::new(AtomicBool::new(false));
-    let mut builder = walk_builder(path, ignore_git);
+    let mut builder = walk_builder(path, ignore_git, overrides);
     builder.threads(threads);
     let walker = builder.build_parallel();
 
@@ -197,6 +198,7 @@ fn scan_directory_serial(
     sink: Arc<file::Sink>,
     ignore_git: bool,
     verbose: bool,
+    overrides: Override,
 ) -> io::Result<()> {
     let failed = Arc::new(AtomicBool::new(false));
     let mut worker = ScanWorker {
@@ -208,7 +210,7 @@ fn scan_directory_serial(
         buffer: file::read_buffer(),
     };
 
-    for entry in walk_builder(path, ignore_git).build() {
+    for entry in walk_builder(path, ignore_git, overrides).build() {
         worker.visit(entry);
     }
     scan_result(failed.load(Ordering::Relaxed))
@@ -222,7 +224,7 @@ fn scan_result(failed: bool) -> io::Result<()> {
     }
 }
 
-fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
+fn walk_builder(path: &Path, ignore_git: bool, overrides: Override) -> WalkBuilder {
     let mut builder = WalkBuilder::new(path);
     builder
         .hidden(false)
@@ -232,7 +234,8 @@ fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
         .git_ignore(ignore_git)
         .git_global(ignore_git)
         .git_exclude(ignore_git)
-        .parents(ignore_git);
+        .parents(ignore_git)
+        .overrides(overrides);
     builder
 }
 
@@ -316,7 +319,7 @@ mod tests {
         fs::write(root.join(".git/objects/data"), b"object").unwrap();
 
         for ignore_git in [true, false] {
-            let paths = walk_builder(&root, ignore_git)
+            let paths = walk_builder(&root, ignore_git, Override::empty())
                 .build()
                 .map(|entry| entry.unwrap().into_path())
                 .collect::<Vec<_>>();
@@ -343,7 +346,16 @@ mod tests {
 
         let sink = file::Sink::new();
 
-        scan_directory(&root, Arc::clone(&sink), false, 4, true, true).unwrap();
+        scan_directory(
+            &root,
+            Arc::clone(&sink),
+            false,
+            4,
+            true,
+            true,
+            Override::empty(),
+        )
+        .unwrap();
 
         let summary = sink.snapshot();
         assert_eq!(summary.all.files, (ADAPTIVE_SMALL_FILE_LIMIT + 1) as u64);
@@ -370,7 +382,7 @@ mod tests {
             &root,
             || {
                 walker_builds.fetch_add(1, Ordering::Relaxed);
-                let mut builder = walk_builder(&root, false);
+                let mut builder = walk_builder(&root, false, Override::empty());
                 builder.threads(4);
                 builder.build_parallel()
             },
