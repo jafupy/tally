@@ -9,6 +9,7 @@ use std::sync::{
 
 const FLUSH_EVERY_FILES: u64 = 512;
 const ADAPTIVE_SMALL_FILE_LIMIT: usize = 128;
+const PATH_BATCH_SIZE: usize = 32;
 
 pub fn scan_directory(
     path: &Path,
@@ -74,6 +75,7 @@ fn scan_directory_adaptive(
                 buffer: file::read_buffer(),
             },
             state: Arc::clone(&state),
+            pending: Vec::with_capacity(PATH_BATCH_SIZE),
         };
 
         Box::new(move |entry| worker.visit(entry))
@@ -96,6 +98,7 @@ struct AdaptiveState {
 struct AdaptiveWorker {
     scan: ScanWorker,
     state: Arc<AdaptiveState>,
+    pending: Vec<PathBuf>,
 }
 
 impl AdaptiveWorker {
@@ -114,26 +117,42 @@ impl AdaptiveWorker {
         }
 
         if self.state.large.load(Ordering::Acquire) {
+            self.flush_pending();
             self.scan.visit_path(entry.path());
             return WalkState::Continue;
+        }
+
+        self.pending.push(entry.into_path());
+        if self.pending.len() == PATH_BATCH_SIZE {
+            self.flush_pending();
+        }
+        WalkState::Continue
+    }
+
+    fn flush_pending(&mut self) {
+        if self.pending.is_empty() {
+            return;
         }
 
         let mut pending = self.state.pending.lock().unwrap();
         if self.state.large.load(Ordering::Relaxed) {
             drop(pending);
-            self.scan.visit_path(entry.path());
-        } else {
-            pending.push(entry.into_path());
-            if pending.len() > ADAPTIVE_SMALL_FILE_LIMIT {
-                self.state.large.store(true, Ordering::Release);
+            for path in self.pending.drain(..) {
+                self.scan.visit_path(&path);
             }
+            return;
         }
-        WalkState::Continue
+
+        pending.append(&mut self.pending);
+        if pending.len() > ADAPTIVE_SMALL_FILE_LIMIT {
+            self.state.large.store(true, Ordering::Release);
+        }
     }
 }
 
 impl Drop for AdaptiveWorker {
     fn drop(&mut self) {
+        self.flush_pending();
         if !self.state.large.load(Ordering::Acquire) {
             return;
         }
