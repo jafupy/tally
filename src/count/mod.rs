@@ -1,8 +1,12 @@
+mod lines;
+mod reader;
+mod syntax;
+
 use crate::{
-    counter::{BUFFER_BYTES, count_lines},
     language::{self, LanguageDef, LanguageId},
-    stats::Stats,
+    result::Stats,
 };
+use lines::{BUFFER_BYTES, count_lines};
 use memchr::memchr;
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -284,5 +288,3 @@ mod tests {
         assert!(count_lines(later_failure, &UNKNOWN).is_err());
     }
 }
-
-mod reader;

@@ -1,5 +1,5 @@
 use super::summary_rows;
-use crate::{stats::Stats, summary::Summary};
+use crate::result::{Stats, Summary};
 use std::io::{self, Write};
 
 pub fn write_summary(output: &mut impl Write, summary: &Summary, color: bool) -> io::Result<()> {

@@ -1,7 +1,7 @@
 mod json;
 mod table;
 
-use crate::{stats::Stats, summary::Summary};
+use crate::result::{Stats, Summary};
 
 pub use json::write_json;
 pub use table::{format_number, write_summary, write_unknown_formats};

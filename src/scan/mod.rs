@@ -1,4 +1,7 @@
-use crate::{batch::Batch, file, sink::Sink};
+use crate::{
+    count,
+    result::{Batch, Sink},
+};
 use ignore::{DirEntry, Error, WalkBuilder, WalkParallel, WalkState};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -46,7 +49,7 @@ pub fn scan_directory(
 
 pub fn scan_file(path: &Path, sink: &Sink, verbose: bool) -> io::Result<()> {
     let mut batch = Batch::default();
-    if let Some(file) = file::parse_file(path, verbose)? {
+    if let Some(file) = count::parse_file(path, verbose)? {
         batch.add(file);
     }
     sink.dump(&mut batch);
@@ -216,7 +219,7 @@ fn worker_batch(sink: Arc<Sink>, verbose: bool, failed: Arc<AtomicBool>) -> Work
         batch: Batch::default(),
         verbose,
         failed,
-        buffer: file::read_buffer(),
+        buffer: count::read_buffer(),
     }
 }
 
@@ -250,7 +253,7 @@ fn file_entry(
 }
 
 fn process_file(state: &mut WorkerBatch, path: &Path) {
-    match file::parse_file_buffered(path, state.verbose, &mut state.buffer) {
+    match count::parse_file_buffered(path, state.verbose, &mut state.buffer) {
         Ok(Some(stats)) => {
             state.batch.add(stats);
             if state.batch.files() >= FLUSH_EVERY_FILES {
