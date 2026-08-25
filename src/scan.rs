@@ -1,4 +1,4 @@
-use crate::file::{self, Batch};
+use crate::{batch::Batch, file, sink::Sink};
 use ignore::{DirEntry, Error, WalkBuilder, WalkParallel, WalkState};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ const PATH_BATCH_SIZE: usize = 32;
 
 pub fn scan_directory(
     path: &Path,
-    sink: Arc<file::Sink>,
+    sink: Arc<Sink>,
     ignore_git: bool,
     threads: usize,
     adaptive_threads: bool,
@@ -36,24 +36,27 @@ pub fn scan_directory(
     let walker = builder.build_parallel();
 
     walker.run(|| {
-        let mut worker = ScanWorker {
-            root: root.clone(),
-            sink: Arc::clone(&sink),
-            batch: Batch::default(),
-            verbose,
-            failed: Arc::clone(&failed),
-            buffer: file::read_buffer(),
-        };
+        let root = root.clone();
+        let mut worker = worker_batch(Arc::clone(&sink), verbose, Arc::clone(&failed));
 
-        Box::new(move |entry| worker.visit(entry))
+        Box::new(move |entry| visit_entry(entry, &root, &mut worker))
     });
     scan_result(failed.load(Ordering::Relaxed))
+}
+
+pub fn scan_file(path: &Path, sink: &Sink, verbose: bool) -> io::Result<()> {
+    let mut batch = Batch::default();
+    if let Some(file) = file::parse_file(path, verbose)? {
+        batch.add(file);
+    }
+    sink.dump(&mut batch);
+    Ok(())
 }
 
 fn scan_directory_adaptive(
     root: &Path,
     build_walker: impl FnOnce() -> WalkParallel,
-    sink: Arc<file::Sink>,
+    sink: Arc<Sink>,
     verbose: bool,
 ) -> io::Result<()> {
     let state = Arc::new(AdaptiveState {
@@ -65,20 +68,14 @@ fn scan_directory_adaptive(
     let walker = build_walker();
 
     walker.run(|| {
-        let mut worker = AdaptiveWorker {
-            scan: ScanWorker {
-                root: root.clone(),
-                sink: Arc::clone(&sink),
-                batch: Batch::default(),
-                verbose,
-                failed: Arc::clone(&failed),
-                buffer: file::read_buffer(),
-            },
+        let mut worker = AdaptiveScan {
+            root: root.clone(),
+            files: worker_batch(Arc::clone(&sink), verbose, Arc::clone(&failed)),
             state: Arc::clone(&state),
             pending: Vec::with_capacity(PATH_BATCH_SIZE),
         };
 
-        Box::new(move |entry| worker.visit(entry))
+        Box::new(move |entry| visit_adaptive(&mut worker, entry))
     });
 
     let scan_failed = if state.large.load(Ordering::Acquire) {
@@ -95,64 +92,54 @@ struct AdaptiveState {
     pending: Mutex<Vec<PathBuf>>,
 }
 
-struct AdaptiveWorker {
-    scan: ScanWorker,
+struct AdaptiveScan {
+    root: PathBuf,
+    files: WorkerBatch,
     state: Arc<AdaptiveState>,
     pending: Vec<PathBuf>,
 }
 
-impl AdaptiveWorker {
-    fn visit(&mut self, entry: Result<DirEntry, Error>) -> WalkState {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                eprintln!("failed to read directory entry: {err}");
-                self.scan.failed.store(true, Ordering::Relaxed);
-                return WalkState::Continue;
-            }
-        };
+fn visit_adaptive(scan: &mut AdaptiveScan, entry: Result<DirEntry, Error>) -> WalkState {
+    let Some(entry) = file_entry(entry, &scan.root, &scan.files.failed) else {
+        return WalkState::Continue;
+    };
 
-        if entry.path() == self.scan.root || !entry.file_type().is_some_and(|kind| kind.is_file()) {
-            return WalkState::Continue;
-        }
-
-        if self.state.large.load(Ordering::Acquire) {
-            self.flush_pending();
-            self.scan.visit_path(entry.path());
-            return WalkState::Continue;
-        }
-
-        self.pending.push(entry.into_path());
-        if self.pending.len() == PATH_BATCH_SIZE {
-            self.flush_pending();
-        }
-        WalkState::Continue
+    if scan.state.large.load(Ordering::Acquire) {
+        flush_pending(scan);
+        process_file(&mut scan.files, entry.path());
+        return WalkState::Continue;
     }
 
-    fn flush_pending(&mut self) {
-        if self.pending.is_empty() {
-            return;
-        }
+    scan.pending.push(entry.into_path());
+    if scan.pending.len() == PATH_BATCH_SIZE {
+        flush_pending(scan);
+    }
+    WalkState::Continue
+}
 
-        let mut pending = self.state.pending.lock().unwrap();
-        if self.state.large.load(Ordering::Relaxed) {
-            drop(pending);
-            for path in self.pending.drain(..) {
-                self.scan.visit_path(&path);
-            }
-            return;
-        }
+fn flush_pending(scan: &mut AdaptiveScan) {
+    if scan.pending.is_empty() {
+        return;
+    }
 
-        pending.append(&mut self.pending);
-        if pending.len() > ADAPTIVE_SMALL_FILE_LIMIT {
-            self.state.large.store(true, Ordering::Release);
+    let mut pending = scan.state.pending.lock().unwrap();
+    if scan.state.large.load(Ordering::Relaxed) {
+        drop(pending);
+        for path in scan.pending.drain(..) {
+            process_file(&mut scan.files, &path);
         }
+        return;
+    }
+
+    pending.append(&mut scan.pending);
+    if pending.len() > ADAPTIVE_SMALL_FILE_LIMIT {
+        scan.state.large.store(true, Ordering::Release);
     }
 }
 
-impl Drop for AdaptiveWorker {
+impl Drop for AdaptiveScan {
     fn drop(&mut self) {
-        self.flush_pending();
+        flush_pending(self);
         if !self.state.large.load(Ordering::Acquire) {
             return;
         }
@@ -160,56 +147,35 @@ impl Drop for AdaptiveWorker {
         loop {
             let path = self.state.pending.lock().unwrap().pop();
             let Some(path) = path else { break };
-            self.scan.visit_path(&path);
+            process_file(&mut self.files, &path);
         }
     }
 }
 
-fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) -> bool {
-    let mut batch = Batch::default();
-    let mut buffer = file::read_buffer();
-    let mut succeeded = true;
+fn scan_file_list(files: Vec<PathBuf>, sink: Arc<Sink>, verbose: bool) -> bool {
+    let failed = Arc::new(AtomicBool::new(false));
+    let mut worker = worker_batch(sink, verbose, Arc::clone(&failed));
 
     for path in files {
-        match file::parse_file_buffered(&path, verbose, &mut buffer) {
-            Ok(Some(stats)) => batch.add(stats),
-            Ok(None) => continue,
-            Err(error) => {
-                eprintln!("failed to read file {}: {error}", path.display());
-                succeeded = false;
-                continue;
-            }
-        }
-
-        if batch.files() >= FLUSH_EVERY_FILES {
-            sink.record_progress(batch.files());
-            sink.add_batch(&mut batch);
-        }
+        process_file(&mut worker, &path);
     }
 
-    sink.record_progress(batch.files());
-    sink.add_batch(&mut batch);
-    succeeded
+    flush_batch(&mut worker);
+    !failed.load(Ordering::Relaxed)
 }
 
 fn scan_directory_serial(
     path: &Path,
-    sink: Arc<file::Sink>,
+    sink: Arc<Sink>,
     ignore_git: bool,
     verbose: bool,
 ) -> io::Result<()> {
     let failed = Arc::new(AtomicBool::new(false));
-    let mut worker = ScanWorker {
-        root: path.to_path_buf(),
-        sink,
-        batch: Batch::default(),
-        verbose,
-        failed: Arc::clone(&failed),
-        buffer: file::read_buffer(),
-    };
+    let root = path.to_path_buf();
+    let mut worker = worker_batch(sink, verbose, Arc::clone(&failed));
 
     for entry in walk_builder(path, ignore_git).build() {
-        worker.visit(entry);
+        visit_entry(entry, &root, &mut worker);
     }
     scan_result(failed.load(Ordering::Relaxed))
 }
@@ -236,59 +202,76 @@ fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
     builder
 }
 
-struct ScanWorker {
-    root: PathBuf,
-    sink: Arc<file::Sink>,
+struct WorkerBatch {
+    sink: Arc<Sink>,
     batch: Batch,
     verbose: bool,
     failed: Arc<AtomicBool>,
     buffer: Vec<u8>,
 }
 
-impl ScanWorker {
-    fn visit(&mut self, entry: Result<DirEntry, Error>) -> WalkState {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                eprintln!("failed to read directory entry: {err}");
-                self.failed.store(true, Ordering::Relaxed);
-                return WalkState::Continue;
-            }
-        };
-
-        if entry.path() == self.root || !entry.file_type().is_some_and(|kind| kind.is_file()) {
-            return WalkState::Continue;
-        }
-
-        self.visit_path(entry.path());
-        WalkState::Continue
-    }
-
-    fn visit_path(&mut self, path: &Path) {
-        match file::parse_file_buffered(path, self.verbose, &mut self.buffer) {
-            Ok(Some(stats)) => {
-                self.batch.add(stats);
-                if self.batch.files() >= FLUSH_EVERY_FILES {
-                    self.flush();
-                }
-            }
-            Ok(None) => {}
-            Err(error) => {
-                eprintln!("failed to read file {}: {error}", path.display());
-                self.failed.store(true, Ordering::Relaxed);
-            }
-        }
-    }
-
-    fn flush(&mut self) {
-        self.sink.record_progress(self.batch.files());
-        self.sink.add_batch(&mut self.batch);
+fn worker_batch(sink: Arc<Sink>, verbose: bool, failed: Arc<AtomicBool>) -> WorkerBatch {
+    WorkerBatch {
+        sink,
+        batch: Batch::default(),
+        verbose,
+        failed,
+        buffer: file::read_buffer(),
     }
 }
 
-impl Drop for ScanWorker {
+fn visit_entry(entry: Result<DirEntry, Error>, root: &Path, worker: &mut WorkerBatch) -> WalkState {
+    let Some(entry) = file_entry(entry, root, &worker.failed) else {
+        return WalkState::Continue;
+    };
+
+    process_file(worker, entry.path());
+    WalkState::Continue
+}
+
+fn file_entry(
+    entry: Result<DirEntry, Error>,
+    root: &Path,
+    failed: &AtomicBool,
+) -> Option<DirEntry> {
+    let entry = match entry {
+        Ok(entry) => entry,
+        Err(err) => {
+            eprintln!("failed to read directory entry: {err}");
+            failed.store(true, Ordering::Relaxed);
+            return None;
+        }
+    };
+
+    if entry.path() == root || !entry.file_type().is_some_and(|kind| kind.is_file()) {
+        return None;
+    }
+    Some(entry)
+}
+
+fn process_file(state: &mut WorkerBatch, path: &Path) {
+    match file::parse_file_buffered(path, state.verbose, &mut state.buffer) {
+        Ok(Some(stats)) => {
+            state.batch.add(stats);
+            if state.batch.files() >= FLUSH_EVERY_FILES {
+                flush_batch(state);
+            }
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("failed to read file {}: {error}", path.display());
+            state.failed.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
+fn flush_batch(state: &mut WorkerBatch) {
+    state.sink.dump(&mut state.batch);
+}
+
+impl Drop for WorkerBatch {
     fn drop(&mut self) {
-        self.flush();
+        flush_batch(self);
     }
 }
 
@@ -341,7 +324,7 @@ mod tests {
             fs::write(root.join(format!("source.unique-{index}")), b"one line\n").unwrap();
         }
 
-        let sink = file::Sink::new();
+        let sink = Arc::new(Sink::new());
 
         scan_directory(&root, Arc::clone(&sink), false, 4, true, true).unwrap();
 
@@ -374,7 +357,7 @@ mod tests {
                 builder.threads(4);
                 builder.build_parallel()
             },
-            file::Sink::new(),
+            Arc::new(Sink::new()),
             false,
         )
         .unwrap();
