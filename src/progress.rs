@@ -1,4 +1,4 @@
-use crate::{output::format_number, sink::Sink};
+use crate::{output::format_number, result::Sink};
 use std::{
     sync::{
         Arc,

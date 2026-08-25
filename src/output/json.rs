@@ -1,5 +1,5 @@
 use super::summary_rows;
-use crate::{stats::Stats, summary::Summary};
+use crate::result::{Stats, Summary};
 use std::io::{self, Write};
 
 #[derive(serde::Serialize)]

@@ -1,8 +1,5 @@
-use crate::{
-    batch::Batch,
-    language::{self, LanguageId},
-    stats::Stats,
-};
+use super::{Batch, Stats};
+use crate::language::{self, LanguageId};
 
 pub struct Summary {
     pub all: Stats,

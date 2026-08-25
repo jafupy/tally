@@ -1,6 +1,6 @@
 use std::ops::AddAssign;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Stats {
     pub(crate) files: u64,
     pub(crate) lines: u64,

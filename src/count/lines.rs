@@ -1,12 +1,10 @@
-mod syntax;
-
+use super::syntax::{StreamingLine, Syntax, contains_non_whitespace, count_line};
 use crate::{
     language::{LanguageDef, QuoteDef},
-    stats::Stats,
+    result::Stats,
 };
 use memchr::memchr_iter;
 use std::io::{self, BufRead};
-use syntax::{StreamingLine, Syntax, contains_non_whitespace, count_line};
 
 pub(crate) const BUFFER_BYTES: usize = 64 * 1024;
 

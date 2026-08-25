@@ -1,4 +1,5 @@
-use crate::{file::FileStats, language::LanguageId, stats::Stats};
+use super::Stats;
+use crate::{count::FileStats, language::LanguageId};
 use std::{
     collections::HashMap,
     hash::{BuildHasherDefault, Hasher},

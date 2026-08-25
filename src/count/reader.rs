@@ -1,4 +1,4 @@
-use crate::counter::BUFFER_BYTES;
+use super::lines::BUFFER_BYTES;
 use std::{
     fs::File,
     io::{self, BufRead, Read},

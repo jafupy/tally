@@ -1,7 +1,7 @@
-use super::BUFFER_BYTES;
+use super::lines::BUFFER_BYTES;
 use crate::{
     language::{LanguageDef, QuoteDef},
-    stats::Stats,
+    result::Stats,
 };
 use memchr::{memchr, memchr2, memchr3, memmem};
 

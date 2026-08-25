@@ -1,13 +1,9 @@
-mod batch;
-mod counter;
-mod file;
+mod count;
 mod language;
 mod output;
 mod progress;
+mod result;
 mod scan;
-mod sink;
-mod stats;
-mod summary;
 mod update;
 
 use scan::{scan_directory, scan_file};
@@ -46,7 +42,7 @@ struct Args {
 }
 
 fn main() {
-    if let Err(error) = run() {
+    if let Err(error) = execute(parse_args()) {
         if error.kind() == ErrorKind::BrokenPipe {
             return;
         }
@@ -55,8 +51,7 @@ fn main() {
     }
 }
 
-fn run() -> io::Result<()> {
-    let args = parse_args();
+fn execute(args: Args) -> io::Result<()> {
     if args.version {
         update::check()?;
         return Ok(());
@@ -76,7 +71,7 @@ fn run() -> io::Result<()> {
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
     let verbose = args.verbose;
-    let sink = Arc::new(sink::Sink::new());
+    let sink = Arc::new(result::Sink::new());
     let progress = std::io::stderr()
         .is_terminal()
         .then(|| progress::start(Arc::clone(&sink)));
