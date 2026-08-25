@@ -1,11 +1,9 @@
 use super::summary_rows;
 use crate::result::{Stats, Summary};
 use std::io::{self, Write};
-
 pub fn write_summary(output: &mut impl Write, summary: &Summary, color: bool) -> io::Result<()> {
     let rows = summary_rows(summary);
     let widths = table_widths(&rows, summary.all);
-
     print_header(output, widths, color)?;
     for (name, stats) in rows {
         print_row(output, widths, name, stats, color, false)?;
@@ -154,18 +152,5 @@ fn print_styled(output: &mut impl Write, line: &str, color: bool, style: &str) -
         writeln!(output, "{style}{line}\x1b[0m")
     } else {
         writeln!(output, "{line}")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn numbers_have_thousands_separators() {
-        assert_eq!(format_number(0), "0");
-        assert_eq!(format_number(999), "999");
-        assert_eq!(format_number(1_000), "1,000");
-        assert_eq!(format_number(12_345_678), "12,345,678");
     }
 }

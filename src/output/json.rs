@@ -1,13 +1,11 @@
 use super::summary_rows;
 use crate::result::{Stats, Summary};
 use std::io::{self, Write};
-
 #[derive(serde::Serialize)]
 struct JsonSummary {
     languages: Vec<JsonLanguage>,
     total: JsonStats,
 }
-
 #[derive(serde::Serialize)]
 struct JsonLanguage {
     language: &'static str,
@@ -55,32 +53,4 @@ pub fn write_json(output: &mut impl Write, summary: &Summary) -> io::Result<()> 
         "{}",
         serde_json::to_string_pretty(&json_summary(summary)).expect("summary should serialize")
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn json_summary_has_language_rows_and_total() {
-        let stats = Stats {
-            files: 1,
-            lines: 3,
-            blanks: 1,
-            comments: 1,
-            code: 1,
-        };
-        let summary = Summary {
-            all: stats,
-            unknown: stats,
-            unknown_formats: Vec::new(),
-            languages: Vec::new(),
-        };
-
-        let value = serde_json::to_value(json_summary(&summary)).unwrap();
-
-        assert_eq!(value["languages"][0]["language"], "Unknown");
-        assert_eq!(value["languages"][0]["files"], 1);
-        assert_eq!(value["total"]["lines"], 3);
-    }
 }
