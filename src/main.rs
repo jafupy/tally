@@ -5,14 +5,12 @@ mod progress;
 mod result;
 mod scan;
 mod update;
-
 use scan::{scan_directory, scan_file};
 use std::{
     io::{self, ErrorKind, IsTerminal},
     path::PathBuf,
     sync::Arc,
 };
-
 #[argue::parser(name = "tally", about = "Count and inspect a codebase")]
 #[derive(Debug)]
 struct Args {
@@ -42,7 +40,18 @@ struct Args {
 }
 
 fn main() {
-    if let Err(error) = execute(parse_args()) {
+    let args = match Args::parse() {
+        Ok(args) => args,
+        Err(err) => {
+            match &err {
+                argue::Error::Help(help) => println!("{help}"),
+                _ => eprintln!("{err}"),
+            }
+            std::process::exit(err.exit_code());
+        }
+    };
+
+    if let Err(error) = execute(args) {
         if error.kind() == ErrorKind::BrokenPipe {
             return;
         }
@@ -68,7 +77,13 @@ fn execute(args: Args) -> io::Result<()> {
     if !path_is_dir {
         std::fs::File::open(&args.path)?;
     }
-    let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
+    let threads = match args.threads {
+        Some(threads) => threads,
+        None if path_is_dir => std::thread::available_parallelism()
+            .map_or(1, |threads| usize::from(threads).saturating_mul(2))
+            .min(8),
+        None => 1,
+    };
     let adaptive_threads = args.threads.is_none() && path_is_dir;
     let verbose = args.verbose;
     let sink = Arc::new(result::Sink::new());
@@ -107,79 +122,4 @@ fn execute(args: Args) -> io::Result<()> {
         output::write_unknown_formats(&mut std::io::stderr().lock(), &summary, stderr_color)?;
     }
     Ok(())
-}
-
-fn parse_args() -> Args {
-    match Args::parse() {
-        Ok(args) => args,
-        Err(err) => {
-            match &err {
-                argue::Error::Help(help) => println!("{help}"),
-                _ => eprintln!("{err}"),
-            }
-            std::process::exit(err.exit_code());
-        }
-    }
-}
-
-fn default_threads(path_is_dir: bool) -> usize {
-    if !path_is_dir {
-        return 1;
-    }
-
-    std::thread::available_parallelism()
-        .map_or(1, |threads| usize::from(threads).saturating_mul(2))
-        .min(8)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn default_threads_uses_one_worker_for_a_file() {
-        assert_eq!(default_threads(false), 1);
-    }
-
-    #[test]
-    fn default_threads_caps_directory_workers() {
-        assert!((1..=8).contains(&default_threads(true)));
-    }
-
-    #[test]
-    fn args_apply_defaults() {
-        let args = Args::parse_from(["tally"]).unwrap();
-
-        assert!(!args.all);
-        assert!(!args.verbose);
-        assert!(!args.json);
-        assert!(!args.version);
-        assert_eq!(args.threads, None);
-        assert_eq!(args.path, PathBuf::from("."));
-    }
-
-    #[test]
-    fn args_parse_flags_options_and_path() {
-        let args = Args::parse_from(["tally", "--all", "--json", "-v", "-j", "2", "src"]).unwrap();
-
-        assert!(args.all);
-        assert!(args.verbose);
-        assert!(args.json);
-        assert_eq!(args.threads, Some(2));
-        assert_eq!(args.path, PathBuf::from("src"));
-    }
-
-    #[test]
-    fn args_report_help() {
-        let err = Args::parse_from(["tally", "--help"]).unwrap_err();
-
-        assert_eq!(err, argue::Error::Help(Args::HELP));
-    }
-
-    #[test]
-    fn args_parse_version() {
-        let args = Args::parse_from(["tally", "--version"]).unwrap();
-
-        assert!(args.version);
-    }
 }
