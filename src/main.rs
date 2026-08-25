@@ -1,19 +1,20 @@
-mod dir;
+mod batch;
+mod counter;
 mod file;
 mod language;
 mod output;
+mod progress;
+mod scan;
+mod sink;
+mod stats;
+mod summary;
 mod update;
 
-use dir::scan_directory;
-use file::{Batch, parse_file};
+use scan::{scan_directory, scan_file};
 use std::{
     io::{self, ErrorKind, IsTerminal},
-    path::{Path, PathBuf},
-    sync::{
-        Arc,
-        mpsc::{self, Receiver},
-    },
-    time::Duration,
+    path::PathBuf,
+    sync::Arc,
 };
 
 #[argue::parser(name = "tally", about = "Count and inspect a codebase")]
@@ -75,11 +76,10 @@ fn run() -> io::Result<()> {
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
     let verbose = args.verbose;
-    let sink = file::Sink::new();
-    let progress = std::io::stderr().is_terminal().then(|| {
-        let (progress_done, done) = mpsc::channel();
-        (progress_done, show_progress(Arc::clone(&sink), done))
-    });
+    let sink = Arc::new(sink::Sink::new());
+    let progress = std::io::stderr()
+        .is_terminal()
+        .then(|| progress::start(Arc::clone(&sink)));
 
     if path_is_dir {
         scan_directory(
@@ -91,23 +91,25 @@ fn run() -> io::Result<()> {
             verbose,
         )?;
     } else {
-        parse_single_file(&args.path, &sink, verbose)?;
+        scan_file(&args.path, &sink, verbose)?;
     }
 
-    if let Some((progress_done, progress)) = progress {
-        let _ = progress_done.send(());
-        progress.join().unwrap();
+    if let Some(progress) = progress {
+        progress::stop(progress);
     }
 
     let summary = sink.snapshot();
+    let stdout_color = std::io::stdout().is_terminal();
+    let mut stdout = std::io::stdout().lock();
     if args.json {
-        output::print_json(&summary)?;
+        output::write_json(&mut stdout, &summary)?;
     } else {
-        output::print_summary(&summary, std::io::stdout().is_terminal())?;
+        output::write_summary(&mut stdout, &summary, stdout_color)?;
     }
 
     if verbose {
-        output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
+        let stderr_color = std::io::stderr().is_terminal();
+        output::write_unknown_formats(&mut std::io::stderr().lock(), &summary, stderr_color)?;
     }
     Ok(())
 }
@@ -133,42 +135,6 @@ fn default_threads(path_is_dir: bool) -> usize {
     std::thread::available_parallelism()
         .map_or(1, |threads| usize::from(threads).saturating_mul(2))
         .min(8)
-}
-
-fn parse_single_file(path: &Path, sink: &file::Sink, verbose: bool) -> io::Result<()> {
-    let mut batch = Batch::default();
-    if let Some(file_stats) = parse_file(path, verbose)? {
-        batch.add(file_stats);
-    }
-    sink.record_progress(batch.files());
-    sink.add_batch(&mut batch);
-    Ok(())
-}
-
-fn show_progress(sink: Arc<file::Sink>, done: Receiver<()>) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(move || {
-        let mut last_files = None;
-
-        loop {
-            match done.recv_timeout(Duration::from_millis(250)) {
-                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    let files = sink.files();
-                    if last_files == Some(files) {
-                        continue;
-                    }
-
-                    last_files = Some(files);
-                    eprint!(
-                        "\r\x1b[36mprocessed {} files\x1b[0m",
-                        output::format_number(files)
-                    );
-                }
-            }
-        }
-
-        eprint!("\r{:<24}\r", "");
-    })
 }
 
 #[cfg(test)]

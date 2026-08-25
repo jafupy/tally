@@ -1,18 +1,17 @@
 use super::summary_rows;
-use crate::file::{Stats, Summary};
+use crate::{stats::Stats, summary::Summary};
 use std::io::{self, Write};
 
-pub fn print_summary(summary: &Summary, color: bool) -> io::Result<()> {
-    let mut output = io::stdout().lock();
+pub fn write_summary(output: &mut impl Write, summary: &Summary, color: bool) -> io::Result<()> {
     let rows = summary_rows(summary);
     let widths = table_widths(&rows, summary.all);
 
-    print_header(&mut output, widths, color)?;
+    print_header(output, widths, color)?;
     for (name, stats) in rows {
-        print_row(&mut output, widths, name, stats, color, false)?;
+        print_row(output, widths, name, stats, color, false)?;
     }
-    print_separator(&mut output, widths, color)?;
-    print_row(&mut output, widths, "Total", summary.all, color, true)
+    print_separator(output, widths, color)?;
+    print_row(output, widths, "Total", summary.all, color, true)
 }
 
 #[derive(Clone, Copy)]
@@ -99,19 +98,22 @@ fn print_separator(output: &mut impl Write, widths: TableWidths, color: bool) ->
     print_styled(output, &line, color, "\x1b[2m")
 }
 
-pub fn print_unknown_formats(summary: &Summary, color: bool) -> io::Result<()> {
+pub fn write_unknown_formats(
+    output: &mut impl Write,
+    summary: &Summary,
+    color: bool,
+) -> io::Result<()> {
     if summary.unknown_formats.is_empty() {
         return Ok(());
     }
 
-    let mut error = io::stderr().lock();
     if color {
-        writeln!(error, "\n\x1b[1;33mUnknown file formats:\x1b[0m")?;
+        writeln!(output, "\n\x1b[1;33mUnknown file formats:\x1b[0m")?;
     } else {
-        writeln!(error, "\nUnknown file formats:")?;
+        writeln!(output, "\nUnknown file formats:")?;
     }
     for (format, files) in &summary.unknown_formats {
-        writeln!(error, "  {format:<24} {:>8}", format_number(*files))?;
+        writeln!(output, "  {format:<24} {:>8}", format_number(*files))?;
     }
     Ok(())
 }
