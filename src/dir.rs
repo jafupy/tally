@@ -106,8 +106,9 @@ impl AdaptiveWorker {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                eprintln!("failed to read directory entry: {err}");
-                self.scan.failed.store(true, Ordering::Relaxed);
+                if report_walk_error(&err) {
+                    self.scan.failed.store(true, Ordering::Relaxed);
+                }
                 return WalkState::Continue;
             }
         };
@@ -175,8 +176,9 @@ fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) -> 
             Ok(Some(stats)) => batch.add(stats),
             Ok(None) => continue,
             Err(error) => {
-                eprintln!("failed to read file {}: {error}", path.display());
-                succeeded = false;
+                if report_file_error(&path, &error) {
+                    succeeded = false;
+                }
                 continue;
             }
         }
@@ -222,6 +224,29 @@ fn scan_result(failed: bool) -> io::Result<()> {
     }
 }
 
+fn report_walk_error(error: &Error) -> bool {
+    if error
+        .io_error()
+        .is_some_and(|error| error.kind() == io::ErrorKind::PermissionDenied)
+    {
+        eprintln!("skipping inaccessible path: {error}");
+        false
+    } else {
+        eprintln!("failed to read directory entry: {error}");
+        true
+    }
+}
+
+fn report_file_error(path: &Path, error: &io::Error) -> bool {
+    if error.kind() == io::ErrorKind::PermissionDenied {
+        eprintln!("skipping inaccessible file {}: {error}", path.display());
+        false
+    } else {
+        eprintln!("failed to read file {}: {error}", path.display());
+        true
+    }
+}
+
 fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
     let mut builder = WalkBuilder::new(path);
     builder
@@ -250,8 +275,9 @@ impl ScanWorker {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                eprintln!("failed to read directory entry: {err}");
-                self.failed.store(true, Ordering::Relaxed);
+                if report_walk_error(&err) {
+                    self.failed.store(true, Ordering::Relaxed);
+                }
                 return WalkState::Continue;
             }
         };
@@ -274,8 +300,9 @@ impl ScanWorker {
             }
             Ok(None) => {}
             Err(error) => {
-                eprintln!("failed to read file {}: {error}", path.display());
-                self.failed.store(true, Ordering::Relaxed);
+                if report_file_error(path, &error) {
+                    self.failed.store(true, Ordering::Relaxed);
+                }
             }
         }
     }
@@ -300,6 +327,24 @@ mod tests {
         sync::atomic::AtomicUsize,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn permission_denied_errors_are_non_fatal() {
+        let walk_error = Error::Io(io::Error::new(io::ErrorKind::PermissionDenied, "denied"));
+        assert!(!report_walk_error(&walk_error));
+
+        let file_error = io::Error::new(io::ErrorKind::PermissionDenied, "denied");
+        assert!(!report_file_error(Path::new("private"), &file_error));
+    }
+
+    #[test]
+    fn other_io_errors_are_fatal() {
+        let walk_error = Error::Io(io::Error::new(io::ErrorKind::Other, "broken"));
+        assert!(report_walk_error(&walk_error));
+
+        let file_error = io::Error::new(io::ErrorKind::Other, "broken");
+        assert!(report_file_error(Path::new("broken"), &file_error));
+    }
 
     #[test]
     fn walks_hidden_entries_but_not_git_directories() {
