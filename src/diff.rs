@@ -31,7 +31,7 @@ pub fn count(root: &Path, reference: &str, overrides: &Override, json: bool) -> 
         let (deleted_lines, added_lines) = line_numbers(&patch(root, reference, &changed.path)?)?;
         let repo_path = prefix.join(&changed.path);
         let old_regular =
-            changed.status != b'A' && revision_is_regular(root, reference, &repo_path)?;
+            changed.status != b'A' && revision_is_regular(root, reference, &changed.path)?;
         let new_regular = changed.status != b'D'
             && fs::symlink_metadata(root.join(&changed.path))
                 .is_ok_and(|meta| meta.file_type().is_file());
@@ -94,7 +94,7 @@ fn changed_files(
     let mut files = Vec::new();
     while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
         let path = git_path(path);
-        if !overrides.matched(&path, false).is_ignore() {
+        if crate::file_is_included(overrides, &path) {
             files.push(ChangedFile {
                 path,
                 status: status[0],

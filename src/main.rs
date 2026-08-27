@@ -135,7 +135,7 @@ fn run() -> io::Result<()> {
     {
         let relative_path = args.path.strip_prefix(override_root).unwrap_or(&args.path);
         if std::fs::symlink_metadata(&args.path)?.file_type().is_file()
-            && !overrides.matched(relative_path, false).is_ignore()
+            && file_is_included(&overrides, relative_path)
         {
             parse_single_file(&args.path, &sink, verbose)?;
         }
@@ -175,7 +175,7 @@ fn build_overrides(root: &Path, includes: &[String], excludes: &[String]) -> io:
 fn git_files(root: &Path) -> io::Result<Vec<PathBuf>> {
     let mut command = std::process::Command::new("git");
     command.current_dir(root);
-    command.args(["ls-files", "-z", "--cached"]);
+    command.args(["ls-files", "-z", "--cached", "--deduplicate"]);
     let output = command.output()?;
     if !output.status.success() {
         return Err(io::Error::other(
@@ -199,14 +199,26 @@ fn parse_file_list(
 ) -> io::Result<()> {
     for path in files {
         if std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_file())
-            && !overrides
-                .matched(path.strip_prefix(root).unwrap_or(&path), false)
-                .is_ignore()
+            && file_is_included(overrides, path.strip_prefix(root).unwrap_or(&path))
         {
             parse_single_file(&path, sink, verbose)?;
         }
     }
     Ok(())
+}
+
+// Paths are relative to the override root. Match the same paths as the walker,
+// including directory exclusions that prevent it from reaching a file.
+fn file_is_included(overrides: &Override, relative_path: &Path) -> bool {
+    relative_path
+        .ancestors()
+        .take_while(|path| !path.as_os_str().is_empty())
+        .enumerate()
+        .all(|(depth, path)| {
+            !overrides
+                .matched(overrides.path().join(path), depth > 0)
+                .is_ignore()
+        })
 }
 
 #[cfg(unix)]
@@ -244,6 +256,7 @@ fn count_stdin(args: &Args) -> io::Result<()> {
 fn parse_args() -> Args {
     let mut argv = std::env::args_os().collect::<Vec<_>>();
     if let Some(position) = argv.iter().position(|arg| arg == "-")
+        && !argv[..position].iter().any(|arg| arg == "--")
         && (position == 1
             || (position + 1 == argv.len()
                 && !matches!(
