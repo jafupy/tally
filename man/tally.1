@@ -1,0 +1,207 @@
+.TH TALLY 1 "August 27, 2026" "Tally" "User Commands"
+.SH NAME
+tally \- count source files and lines, or inspect changes against Git
+.SH SYNOPSIS
+.B tally
+.RI [ options ]
+.RI [ path ]
+.br
+.B tally
+.RI [ options ]
+.RI [ path ]
+.B \-\-diff
+.RI [ revision ]
+.br
+.B tally
+.RI [ options ]
+.B \-\- \-
+.SH DESCRIPTION
+Tally counts regular text files and groups their lines by language.
+The path defaults to the current directory; directories are scanned recursively.
+An explicit file is counted on its own.
+Language detection uses filenames, extensions, and selected content rules,
+including shebangs.
+Unrecognised text is counted as Unknown, with nonblank lines counted as code.
+Files whose initial text sample contains NUL bytes or invalid UTF-8 are skipped.
+.PP
+A path of
+.B \-
+reads standard input as one file, not as a list of filenames.
+Without a filename, language detection relies on a recognised shebang;
+otherwise the text is Unknown.
+Piping input without specifying this path does not select standard input.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print help and exit.
+.TP
+.BR \-V ", " \-\-version
+Print the installed version and check GitHub for a newer release.
+This requires network access and can fail after printing the version.
+When an update exists, print its release notes.
+If both standard input and standard output are terminals, offer to replace
+the executable; an empty answer accepts the update.
+Otherwise, only print instructions for updating interactively.
+The manual is not updated by this command.
+.TP
+.BR \-a ", " \-\-all
+Disable Git ignore rules during an ordinary directory scan, including global
+Git ignores and repository excludes.
+This does not disable all filtering: .ignore files still apply,
+\&.git directories are still skipped, and explicit exclusions still apply.
+It does not add untracked files to diff mode.
+.TP
+.BR \-j " " N ", " \-\-threads " " N
+Set the directory worker count.
+By default Tally adapts its directory scan, using up to twice the available
+parallelism, capped at 8 workers; a single file uses one worker.
+Values 0 and 1 select a serial directory scan.
+Tracked-file, diff, and standard-input counting do not use this setting.
+.TP
+.BR \-v ", " \-\-verbose
+Print extra diagnostics, including a breakdown of unknown file formats
+on standard error after a normal file or directory count.
+Diff and standard-input modes do not print that breakdown.
+.TP
+.B \-\-json
+Write structured JSON instead of a table. See OUTPUT.
+.TP
+.BR \-\-tracked
+Count files listed in the Git index, using their current working-tree contents.
+Requires Git and a working-tree repository.
+Untracked files are excluded; staged additions are included.
+Deleted files, nonregular files, and entries whose metadata cannot be read
+are skipped.
+Directory scope and explicit filters still apply, but ignore files do not.
+An explicit untracked file produces an empty count.
+.TP
+.BR \-\-include " " glob
+Include matching paths. May be repeated.
+Quote globs to prevent shell expansion, for example
+.BR "\-\-include '*.rs'" .
+See FILTERING AND GIT.
+.TP
+.BR \-\-exclude " " glob
+Exclude matching paths. May be repeated.
+Exclusions are applied after inclusions, regardless of their command-line order.
+.TP
+.BR \-\-diff " [revision]"
+Count added and deleted lines between a Git revision and the working tree.
+The default revision is HEAD; an explicit revision may also use
+.BR \-\-diff=revision .
+An explicit directory path must precede this option:
+.BR "tally src \-\-diff main" .
+The next non-option argument after a bare
+.B \-\-diff
+is interpreted as its revision, not as the path.
+See DIFF MODE.
+.TP
+.B \-\-
+End option parsing, useful for paths beginning with a dash
+and for standard input.
+.SH FILTERING AND GIT
+Ordinary directory scans include hidden files and untracked files unless
+ignored. Git ignore rules apply by default in repositories; .ignore files
+are also respected. Directories named .git are always skipped.
+Symlink entries are not counted or followed during directory traversal.
+An explicit file bypasses directory ignore rules
+but still uses explicit filters.
+.PP
+Include and exclude patterns use gitignore-style glob syntax.
+Patterns are relative to the selected directory, or to the parent of an
+explicit file. A pattern without a slash can match at any depth;
+use a leading slash to anchor it to that root.
+With positive include patterns, nonmatching files are excluded.
+An include can override ignore-file rules, but explicit exclusions win.
+Excluding a directory also excludes its descendants.
+Use ordinary positive globs for these options; a leading exclamation mark
+has negation semantics in the underlying matcher.
+.PP
+Tracked and diff modes require the git executable on PATH and operate within
+the selected directory, not automatically over the entire repository.
+They apply include/exclude filters but do not use directory ignore rules.
+In diff mode, \-\-all and \-\-tracked do not change the selected files.
+Standard input cannot be combined with \-\-tracked, \-\-diff,
+\-\-include, or \-\-exclude; \-\-all has no effect on it.
+.SH DIFF MODE
+The path must be an existing directory inside a Git working tree.
+The comparison is the selected revision against current working-tree contents,
+including the combined effect of staged and unstaged changes.
+It is not an index-only comparison or a comparison between two revisions.
+Untracked files are not included; files added to the index can be included.
+Renames are treated as deletions and additions.
+.PP
+Only changed lines are counted, classified using their surrounding file content
+on the relevant side of the comparison.
+Binary changes and changes without counted added or deleted lines do not
+produce rows. Nonregular entries, including symlinks, are not counted as text.
+Permission-denied errors are not generally downgraded to warnings in this mode.
+.SH OUTPUT
+Results go to standard output. Progress and diagnostics go to standard error.
+Tables use colour when standard output is a terminal;
+ordinary scans show progress when standard error is a terminal.
+.PP
+The normal table has Language, Files, Lines, Blank, Comment, and Code columns,
+followed by a Total row. Languages are ordered by descending code count.
+Lines are classified as blank, comment-only, or code; a line with both code
+and a comment counts as code. A final line without a newline still counts.
+Comment detection is language-based, not a full compiler parser.
+.PP
+Normal JSON has a languages array and a total object.
+Each language entry has language, files, lines, blanks, comments, and code;
+total has the same numeric fields without language.
+Counts are integers, without the table's thousands separators.
+.PP
+Diff tables use the same columns with +added/\-deleted pairs.
+Equal counts are abbreviated as \(+-N: for example, \(+-3 means three added
+and three deleted, not a net change of three.
+Files counts files contributing counted lines on each side; a modified file
+can contribute to both counts. Rows are ordered by added plus deleted code.
+Diff JSON has languages and total, with added and deleted objects containing
+files, lines, blanks, comments, and code; each language entry also has language.
+.SH ERRORS AND EXIT STATUS
+.TP
+.B 0
+Successful count, help, or version/update operation.
+Empty results and differences found are successful.
+A broken output pipe is also treated as success.
+.TP
+.B 1
+Runtime failure, such as an invalid path, invalid glob,
+invalid mode combination, Git failure, input/output failure,
+or failed update check.
+.TP
+.B 2
+Command-line parsing error, such as an unknown option
+or invalid numeric argument.
+.PP
+During ordinary directory scans, permission-denied errors reported by the walker
+or file reader warn on standard error and skip the inaccessible paths.
+They do not alone cause failure; the result can therefore be incomplete even
+with exit status 0. Other scan errors cause failure and suppress the summary.
+Failure to read the initial path's metadata, or to open an explicit file,
+remains fatal. Tracked mode can silently skip unavailable metadata, but a file
+read failure is fatal. Diff mode can likewise skip unavailable working-tree
+metadata; it does not offer a general permission-skipping guarantee.
+.SH EXAMPLES
+.nf
+tally
+tally src
+tally \-\-json src > counts.json
+tally \-\-all .
+tally \-\-tracked src
+tally src \-\-include '*.rs' \-\-exclude 'generated/'
+tally . \-\-diff
+tally src \-\-diff main
+tally \-\-diff
+tally \-\-diff HEAD~1
+tally src \-\-json \-\-diff main > changes.json
+cat script.py | tally \-\- \-
+.fi
+.PP
+The standard-input example is detected as Python only if it has a recognised
+Python shebang; the original filename is not passed through the pipe.
+.SH SEE ALSO
+.BR git (1),
+.BR gitignore (5),
+.BR man (1)
