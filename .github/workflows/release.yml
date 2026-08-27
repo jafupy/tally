@@ -67,6 +67,15 @@ jobs:
         with:
           path: release
           merge-multiple: true
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ format('refs/tags/{0}', env.RELEASE_TAG) }}
+          path: source
+      - name: Package manual from the release tag
+        run: |
+          if [ -f source/man/tally.1 ]; then
+            install -m 644 source/man/tally.1 release/tally.1
+          fi
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
