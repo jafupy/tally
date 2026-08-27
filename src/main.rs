@@ -18,7 +18,11 @@ use std::{
     time::Duration,
 };
 
-#[argue::parser(name = "tally", about = "Count and inspect a codebase")]
+#[argue::parser(
+    name = "tally",
+    about = "Count and inspect a codebase",
+    long_about = "Diff usage: tally [path] --diff [revision]\nThe path defaults to . and the revision to HEAD. Put an explicit path before --diff."
+)]
 #[derive(Debug)]
 struct Args {
     /// Print the version and check GitHub for updates.
@@ -41,8 +45,8 @@ struct Args {
     #[flag(long = "json")]
     json: bool,
 
-    /// Count added and deleted lines since this git ref.
-    #[option(long = "diff")]
+    /// Compare the working tree against an optional git revision (default: HEAD).
+    #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
     diff: Option<String>,
 
     /// Count only files known to git.
@@ -268,6 +272,26 @@ fn parse_args() -> Args {
         argv.remove(position);
         argv.push("--".into());
         argv.push("-".into());
+    }
+    // argue's optional values only accept explicit revisions with `=`.
+    // Join space-separated revisions without touching other option values or `--`.
+    let mut position = 1;
+    while position < argv.len() {
+        match argv[position].to_str() {
+            Some("--") => break,
+            Some("-j" | "--threads" | "--include" | "--exclude") => position += 2,
+            Some("--diff") => {
+                if argv.get(position + 1).is_some_and(|value| {
+                    value == "-" || !value.as_encoded_bytes().starts_with(b"-")
+                }) {
+                    let revision = argv.remove(position + 1);
+                    argv[position].push("=");
+                    argv[position].push(revision);
+                }
+                position += 1;
+            }
+            _ => position += 1,
+        }
     }
     match Args::parse_from(argv) {
         Ok(args) => args,
