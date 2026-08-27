@@ -38,7 +38,7 @@ to change the binary directory and `TALLY_MAN_DIR` to change the manual root
 release. These variables must be passed to `sh`, for example:
 
 ```sh
-curl -fsSL https://jafupy.com/tally.sh | TALLY_VERSION=v1.3.0 sh
+curl -fsSL https://jafupy.com/tally.sh | TALLY_VERSION=v1.3 sh
 ```
 
 Older releases have no manual asset: the binary still installs, with a warning.

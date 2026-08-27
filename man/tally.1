@@ -27,8 +27,9 @@ Files whose initial text sample contains NUL bytes or invalid UTF-8 are skipped.
 A path of
 .B \-
 reads standard input as one file, not as a list of filenames.
-Without a filename, language detection relies on a recognised shebang;
-otherwise the text is Unknown.
+Standard input is classified as Stdin, regardless of any shebang.
+This language has no comment rules: blank lines count as blank,
+and all other lines count as code.
 Piping input without specifying this path does not select standard input.
 .SH OPTIONS
 .TP
@@ -199,8 +200,9 @@ tally src \-\-json \-\-diff main > changes.json
 cat script.py | tally \-\- \-
 .fi
 .PP
-The standard-input example is detected as Python only if it has a recognised
-Python shebang; the original filename is not passed through the pipe.
+The standard-input example is counted as Stdin, not Python.
+Comments and any shebang count as code; the original filename is not passed
+through the pipe.
 .SH SEE ALSO
 .BR git (1),
 .BR gitignore (5),
