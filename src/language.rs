@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn includes_the_cloc_language_catalog() {
-        assert_eq!(count(), 421);
+        assert_eq!(count(), 422);
     }
 
     #[test]
@@ -181,6 +181,12 @@ mod tests {
 
         let language_id = detect_path(Path::new("Makefile"), None).unwrap();
         assert_eq!(get(language_id).name, "Makefile");
+    }
+
+    #[test]
+    fn detects_stdin() {
+        let language_id = detect_path(Path::new("-"), None).unwrap();
+        assert_eq!(get(language_id).name, "Stdin");
     }
 
     #[test]
