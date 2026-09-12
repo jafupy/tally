@@ -1,12 +1,11 @@
-mod direct_dynamic;
+mod crawler;
 
 use crate::file::{self, Batch};
-use ignore::{DirEntry, Error, WalkBuilder, WalkState};
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicBool, Ordering},
 };
 
 const FLUSH_EVERY_FILES: u64 = 512;
@@ -19,70 +18,7 @@ pub fn scan_directory(
     adaptive_threads: bool,
     verbose: bool,
 ) -> io::Result<()> {
-    if adaptive_threads && threads > 1 {
-        // Sub-walks would also load .ignore rules above the requested root,
-        // which -a's ordinary walk does not do.
-        let ancestor_ignore = !ignore_git
-            && path.canonicalize().ok().is_some_and(|root| {
-                root.ancestors()
-                    .skip(1)
-                    .any(|dir| dir.join(".ignore").exists())
-            });
-        if ancestor_ignore {
-            return scan_directory(path, sink, ignore_git, threads.min(3), false, verbose);
-        }
-        return direct_dynamic::scan(path, ignore_git, threads, sink, verbose);
-    }
-
-    if threads <= 1 {
-        return scan_directory_serial(path, sink, ignore_git, verbose);
-    }
-
-    let root = path.to_path_buf();
-    let failed = Arc::new(AtomicBool::new(false));
-    let mut builder = walk_builder(path, ignore_git);
-    builder.threads(threads);
-    let walker = builder.build_parallel();
-
-    walker.run(|| {
-        let mut worker = ScanWorker {
-            root: root.clone(),
-            sink: Arc::clone(&sink),
-            batch: Batch::default(),
-            verbose,
-            failed: Arc::clone(&failed),
-            buffer: file::read_buffer(),
-            completed_bytes: None,
-            completed_files: None,
-        };
-
-        Box::new(move |entry| worker.visit(entry))
-    });
-    scan_result(failed.load(Ordering::Relaxed))
-}
-
-fn scan_directory_serial(
-    path: &Path,
-    sink: Arc<file::Sink>,
-    ignore_git: bool,
-    verbose: bool,
-) -> io::Result<()> {
-    let failed = Arc::new(AtomicBool::new(false));
-    let mut worker = ScanWorker {
-        root: path.to_path_buf(),
-        sink,
-        batch: Batch::default(),
-        verbose,
-        failed: Arc::clone(&failed),
-        buffer: file::read_buffer(),
-        completed_bytes: None,
-        completed_files: None,
-    };
-
-    for entry in walk_builder(path, ignore_git).build() {
-        worker.visit(entry);
-    }
-    scan_result(failed.load(Ordering::Relaxed))
+    crawler::scan(path, ignore_git, threads, adaptive_threads, sink, verbose)
 }
 
 fn scan_result(failed: bool) -> io::Result<()> {
@@ -93,61 +29,17 @@ fn scan_result(failed: bool) -> io::Result<()> {
     }
 }
 
-fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
-    let mut builder = WalkBuilder::new(path);
-    builder
-        .hidden(false)
-        .filter_entry(|entry| {
-            !entry.file_type().is_some_and(|kind| kind.is_dir()) || entry.file_name() != ".git"
-        })
-        .git_ignore(ignore_git)
-        .git_global(ignore_git)
-        .git_exclude(ignore_git)
-        .parents(ignore_git)
-        .require_git(false);
-    builder
-}
-
 struct ScanWorker {
-    root: PathBuf,
     sink: Arc<file::Sink>,
     batch: Batch,
     verbose: bool,
     failed: Arc<AtomicBool>,
     buffer: Vec<u8>,
-    completed_bytes: Option<Arc<AtomicU64>>,
-    completed_files: Option<Arc<AtomicU64>>,
 }
 
 impl ScanWorker {
-    fn visit(&mut self, entry: Result<DirEntry, Error>) -> WalkState {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                eprintln!("failed to read directory entry: {err}");
-                self.failed.store(true, Ordering::Relaxed);
-                return WalkState::Continue;
-            }
-        };
-
-        if entry.path() == self.root || !entry.file_type().is_some_and(|kind| kind.is_file()) {
-            return WalkState::Continue;
-        }
-
-        self.visit_path(entry.path());
-        WalkState::Continue
-    }
-
     fn visit_path(&mut self, path: &Path) {
-        let result = match &self.completed_bytes {
-            Some(bytes) => {
-                file::parse_file_buffered_with_progress(path, self.verbose, &mut self.buffer, bytes)
-            }
-            None => file::parse_file_buffered(path, self.verbose, &mut self.buffer),
-        };
-        if let Some(files) = &self.completed_files {
-            files.fetch_add(1, Ordering::Relaxed);
-        }
+        let result = file::parse_file_buffered(path, self.verbose, &mut self.buffer);
         match result {
             Ok(Some(stats)) => {
                 self.batch.add(stats);
@@ -198,14 +90,9 @@ mod tests {
         fs::write(root.join(".git/objects/data"), b"object").unwrap();
 
         for ignore_git in [true, false] {
-            let paths = walk_builder(&root, ignore_git)
-                .build()
-                .map(|entry| entry.unwrap().into_path())
-                .collect::<Vec<_>>();
-
-            assert!(paths.contains(&root.join(".dotfile")));
-            assert!(paths.contains(&root.join(".hidden/source.rs")));
-            assert!(!paths.iter().any(|path| path.starts_with(root.join(".git"))));
+            let sink = file::Sink::new();
+            scan_directory(&root, Arc::clone(&sink), ignore_git, 1, false, true).unwrap();
+            assert_eq!(sink.snapshot().all.files, 2);
         }
 
         fs::remove_dir_all(root).unwrap();
