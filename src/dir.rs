@@ -103,7 +103,8 @@ fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
         .git_ignore(ignore_git)
         .git_global(ignore_git)
         .git_exclude(ignore_git)
-        .parents(ignore_git);
+        .parents(ignore_git)
+        .require_git(false);
     builder
 }
 
