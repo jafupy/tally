@@ -1,5 +1,29 @@
 # Lock-free MPMC ring experiment
 
+## 200-run comparison with installed Tally 1.3 and latest master
+
+Benchmarked `~/Developer` with 200 timed runs per binary in each order and
+mode, two warmups per binary, 2,400 timed scans total. Installed Tally was
+`/Users/jafu/.local/bin/tally` version 1.3.0. Fetched `origin/master` at
+`2915a5411ea3d0a54be3af173ef7f2188980b747` and built it in a separate
+worktree. Only Finder and ChatGPT were visible. Values are mean wall time in
+microseconds.
+
+| Mode and order | Installed 1.3 | Master | Shared crawler |
+| --- | ---: | ---: | ---: |
+| `-a`, 1.3 → master → crawler | 1,445,329 | 1,440,689 | 1,171,273 |
+| `-a`, crawler → master → 1.3 | 1,435,788 | 1,434,279 | 1,162,341 |
+| Normal, 1.3 → master → crawler | 867,744 | 867,679 | 664,227 |
+| Normal, crawler → master → 1.3 | 866,738 | 857,490 | 663,668 |
+
+Full JSON output matched exactly in `-a` mode for all three binaries. There,
+the shared crawler took about 19% less wall time than either baseline in both
+orders. Normal mode is not a like-for-like workload: installed 1.3 and master
+counted 61,119 files, while the crawler counted 57,111 because it respects
+more ignore rules. The crawler's lower normal-mode wall time therefore cannot
+be attributed entirely to crawler speed. Raw Hyperfine distributions are in
+`/tmp/tally-crawler-vs-v13-master-{all,default}-{forward,reverse}200.json`.
+
 Current worktree status: an own `std::fs::read_dir` crawler with two bounded
 lock-free MPMC rings. Directory jobs carry inherited ignore-rule state; the
 `ignore` crate is used only as a pattern matcher. Every worker can list
