@@ -345,6 +345,7 @@ dependencies = [
  "argue",
  "crossbeam-channel",
  "ignore",
+ "libc",
  "memchr",
  "regex",
  "semver",
