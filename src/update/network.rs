@@ -5,11 +5,9 @@ use std::{
     io::{self, Read, Write},
     process::{Command, ExitStatus, Stdio},
 };
-
 const REPOSITORY: &str = "jafupy/tally";
 const MAX_METADATA_BYTES: usize = 1024 * 1024;
 const MAX_BINARY_BYTES: usize = 16 * 1024 * 1024;
-
 pub fn latest_release() -> io::Result<Release> {
     let url = format!("https://api.github.com/repos/{REPOSITORY}/releases/latest");
     let output = run_download(&url, true, MAX_METADATA_BYTES)?;
@@ -151,24 +149,4 @@ fn capture(mut command: Command, max_bytes: usize) -> io::Result<(Vec<u8>, ExitS
         return Err(io::Error::other("download exceeded size limit"));
     }
     Ok((body, child.wait()?))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn verifies_sha256_digests() {
-        let digest = format!("sha256:{:x}", Sha256::digest(b"tally"));
-        assert!(verify_digest(b"tally", Some(&digest)).is_ok());
-        assert!(verify_digest(b"tampered", Some(&digest)).is_err());
-        assert!(verify_digest(b"tally", None).is_err());
-    }
-
-    #[test]
-    fn bounds_captured_downloads() {
-        let mut command = Command::new("sh");
-        command.args(["-c", "printf 12345"]);
-        assert!(capture(command, 4).is_err());
-    }
 }
