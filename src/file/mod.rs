@@ -6,6 +6,7 @@ pub use sink::{Batch, Sink, Stats, Summary};
 use std::fs::File;
 use std::io::{self, BufRead, Read};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const BUFFER_BYTES: usize = 64 * 1024;
 const DETECTION_PREFIX_BYTES: usize = 16 * 1024;
@@ -41,7 +42,25 @@ pub fn parse_file_buffered(
     verbose: bool,
     buffer: &mut [u8],
 ) -> io::Result<Option<FileStats>> {
-    let mut reader = ReusableBufReader::new(File::open(path)?, buffer);
+    parse_file_buffered_inner(path, verbose, buffer, None)
+}
+
+pub fn parse_file_buffered_with_progress(
+    path: &Path,
+    verbose: bool,
+    buffer: &mut [u8],
+    completed_bytes: &AtomicU64,
+) -> io::Result<Option<FileStats>> {
+    parse_file_buffered_inner(path, verbose, buffer, Some(completed_bytes))
+}
+
+fn parse_file_buffered_inner<'a>(
+    path: &Path,
+    verbose: bool,
+    buffer: &'a mut [u8],
+    completed_bytes: Option<&'a AtomicU64>,
+) -> io::Result<Option<FileStats>> {
+    let mut reader = ReusableBufReader::new(File::open(path)?, buffer, completed_bytes);
 
     let language_id = {
         let prefix = read_prefix(&mut reader)?;
@@ -98,16 +117,18 @@ struct ReusableBufReader<'a> {
     buffer: &'a mut [u8],
     position: usize,
     filled: usize,
+    completed_bytes: Option<&'a AtomicU64>,
 }
 
 impl<'a> ReusableBufReader<'a> {
-    fn new(file: File, buffer: &'a mut [u8]) -> Self {
+    fn new(file: File, buffer: &'a mut [u8], completed_bytes: Option<&'a AtomicU64>) -> Self {
         debug_assert!(buffer.len() >= BUFFER_BYTES);
         Self {
             file,
             buffer: &mut buffer[..BUFFER_BYTES],
             position: 0,
             filled: 0,
+            completed_bytes,
         }
     }
 }
@@ -127,6 +148,9 @@ impl BufRead for ReusableBufReader<'_> {
         if self.position == self.filled {
             self.filled = self.file.read(self.buffer)?;
             self.position = 0;
+            if let Some(completed_bytes) = self.completed_bytes {
+                completed_bytes.fetch_add(self.filled as u64, Ordering::Relaxed);
+            }
         }
         Ok(&self.buffer[self.position..self.filled])
     }
