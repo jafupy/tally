@@ -7,6 +7,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 argue = { git = "https://github.com/jafupy/argue" }
 crossbeam-channel = "0.5"
+crossbeam-queue = "0.3"
 ignore = "0.4"
 libc = "0.2"
 memchr = "2"
