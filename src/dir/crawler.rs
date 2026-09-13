@@ -4,7 +4,7 @@ mod metrics;
 mod rules;
 mod workers;
 
-use super::{scan_result, report_file_error};
+use super::{report_file_error, scan_result};
 use crate::file;
 use crate::trace_output::TraceOutput;
 use crossbeam_queue::ArrayQueue;
@@ -188,10 +188,10 @@ fn list_directory(
             } else if matched.is_whitelist() {
                 false
             } else {
-            rules
-                .as_ref()
-                .is_some_and(|rules| rules.ignored(&path, is_dir, global))
-                || (rules.is_none() && global.matched(&path, is_dir).is_ignore())
+                rules
+                    .as_ref()
+                    .is_some_and(|rules| rules.ignored(&path, is_dir, global))
+                    || (rules.is_none() && global.matched(&path, is_dir).is_ignore())
             }
         };
         if ignored {

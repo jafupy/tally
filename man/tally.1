@@ -79,7 +79,9 @@ ordinary release binaries reject this mode.
 The trace appends JSON Lines to
 .B .tallydebug
 in the current directory, records file paths and scan activity, and excludes
-that trace file from the scan.
+that trace file from directory, tracked-file, and diff scans.
+Explicit input of the trace file is rejected.
+Diff and standard-input modes do not print the diagnostic summary.
 Do not put a space before the level value.
 The former \-v/\-\-verbose option is not part of this interface.
 .TP
@@ -121,8 +123,8 @@ End option parsing, useful for paths beginning with a dash
 and for standard input.
 .SH FILTERING AND GIT
 Ordinary directory scans include hidden files and untracked files unless
-ignored. Git ignore rules apply by default in repositories; .ignore files
-are also respected. Directories named .git are always skipped.
+ignored. Git ignore rules apply by default, including outside repositories;
+\&.ignore files are also respected. Directories named .git are always skipped.
 Symlink entries are not counted or followed during directory traversal.
 An explicit file bypasses directory ignore rules
 but still uses explicit filters.

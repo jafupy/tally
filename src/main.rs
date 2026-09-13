@@ -305,7 +305,11 @@ fn parse_file_list(
     sink: &file::Sink,
     verbose: bool,
 ) -> io::Result<()> {
+    let trace_output = trace_output::TraceOutput::current()?;
     for path in files {
+        if trace_output.matches_file(&path) {
+            continue;
+        }
         if std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_file())
             && file_is_included(overrides, path.strip_prefix(root).unwrap_or(&path))
         {
