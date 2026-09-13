@@ -68,4 +68,13 @@ Ensure `~/.local/bin` is on `PATH`; use the `MANPATH` setting above if needed.
 Native release downloads also include a standalone `tally.1` asset for manual
 installation without a Rust toolchain.
 
+In builds with the v1.4 scan and debug features, `tally -d` (or
+`tally --debug=summary`) prints timing, CPU, and unknown-format diagnostics to
+standard error, plus worker and queue measurements for directory scans.
+`tally --debug=max` also appends an event trace
+to `.tallydebug` in the current directory; it requires a source build with
+`cargo build --release --features trace`. Regular release binaries do not
+include that feature. The manual also covers the v1.4 Git filters, tracked-file
+and diff modes; use a build that includes those v1.4 features.
+
 GPL-3.0-or-later. Counts faster than anyone asked it to.

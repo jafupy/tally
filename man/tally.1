@@ -54,15 +54,34 @@ It does not add untracked files to diff mode.
 .TP
 .BR \-j " " N ", " \-\-threads " " N
 Set the directory worker count.
-By default Tally adapts its directory scan, using up to twice the available
-parallelism, capped at 8 workers; a single file uses one worker.
+By default a directory scan starts with one worker and grows when work queues
+fill, up to the number of logical CPUs available to the process.
+An explicit N sets a fixed worker limit; the TALLY_RING_WORKERS environment
+variable can lower that limit.
+A single file is counted on the main thread.
 Values 0 and 1 select a serial directory scan.
 Tracked-file, diff, and standard-input counting do not use this setting.
 .TP
-.BR \-v ", " \-\-verbose
-Print extra diagnostics, including a breakdown of unknown file formats
-on standard error after a normal file or directory count.
-Diff and standard-input modes do not print that breakdown.
+.B \-d, \-\-debug[=summary|max]
+Print a diagnostic summary on standard error after a file or directory count.
+It includes wall and CPU time, worker and queue measurements for directory
+scans, and a breakdown of unknown file formats.
+.B \-d
+and
+.B \-\-debug
+select the summary; the explicit form is
+.BR \-\-debug=summary .
+Use
+.B \-\-debug=max
+for the summary and a full event trace. This requires a binary built with
+.BR "cargo build --release --features trace" ;
+ordinary release binaries reject this mode.
+The trace appends JSON Lines to
+.B .tallydebug
+in the current directory, records file paths and scan activity, and excludes
+that trace file from the scan.
+Do not put a space before the level value.
+The former \-v/\-\-verbose option is not part of this interface.
 .TP
 .B \-\-json
 Write structured JSON instead of a table. See OUTPUT.
