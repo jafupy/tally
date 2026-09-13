@@ -1,5 +1,7 @@
 mod crawler;
 
+pub(crate) use crawler::ScanReport;
+
 use crate::file::{self, Batch};
 use std::io;
 use std::path::Path;
@@ -16,9 +18,9 @@ pub fn scan_directory(
     ignore_git: bool,
     threads: usize,
     adaptive_threads: bool,
-    verbose: bool,
-) -> io::Result<()> {
-    crawler::scan(path, ignore_git, threads, adaptive_threads, sink, verbose)
+    debug: bool,
+) -> io::Result<ScanReport> {
+    crawler::scan(path, ignore_git, threads, adaptive_threads, sink, debug)
 }
 
 fn scan_result(failed: bool) -> io::Result<()> {
@@ -32,14 +34,17 @@ fn scan_result(failed: bool) -> io::Result<()> {
 struct ScanWorker {
     sink: Arc<file::Sink>,
     batch: Batch,
-    verbose: bool,
+    debug: bool,
     failed: Arc<AtomicBool>,
     buffer: Vec<u8>,
 }
 
 impl ScanWorker {
     fn visit_path(&mut self, path: &Path) {
-        let result = file::parse_file_buffered(path, self.verbose, &mut self.buffer);
+        #[cfg(feature = "trace")]
+        let _file_context = crate::trace::file_context(path);
+        let _span = trace_span!("visit_path", Some(path));
+        let result = file::parse_file_buffered(path, self.debug, &mut self.buffer);
         match result {
             Ok(Some(stats)) => {
                 self.batch.add(stats);
@@ -47,8 +52,15 @@ impl ScanWorker {
                     self.flush();
                 }
             }
-            Ok(None) => {}
+            Ok(None) => {
+                trace_event!("file_skipped", Some(path), serde_json::json!({}));
+            }
             Err(error) => {
+                trace_event!(
+                    "file_error",
+                    Some(path),
+                    serde_json::json!({"error": error.to_string()})
+                );
                 eprintln!("failed to read file {}: {error}", path.display());
                 self.failed.store(true, Ordering::Relaxed);
             }
@@ -56,6 +68,7 @@ impl ScanWorker {
     }
 
     fn flush(&mut self) {
+        let _span = trace_span!("worker_flush", None);
         self.sink.record_progress(self.batch.files());
         self.sink.add_batch(&mut self.batch);
     }

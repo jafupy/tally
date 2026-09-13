@@ -32,53 +32,91 @@ pub enum FileStats {
     },
 }
 
-pub fn parse_file(path: &Path, verbose: bool) -> io::Result<Option<FileStats>> {
+pub fn parse_file(path: &Path, debug: bool) -> io::Result<Option<FileStats>> {
     let mut buffer = vec![0; BUFFER_BYTES];
-    parse_file_buffered(path, verbose, &mut buffer)
+    parse_file_buffered(path, debug, &mut buffer)
 }
 
 pub fn parse_file_buffered(
     path: &Path,
-    verbose: bool,
+    debug: bool,
     buffer: &mut [u8],
 ) -> io::Result<Option<FileStats>> {
-    parse_file_buffered_inner(path, verbose, buffer, None)
+    parse_file_buffered_inner(path, debug, buffer, None)
 }
 
 pub fn parse_file_buffered_with_progress(
     path: &Path,
-    verbose: bool,
+    debug: bool,
     buffer: &mut [u8],
     completed_bytes: &AtomicU64,
 ) -> io::Result<Option<FileStats>> {
-    parse_file_buffered_inner(path, verbose, buffer, Some(completed_bytes))
+    parse_file_buffered_inner(path, debug, buffer, Some(completed_bytes))
 }
 
 fn parse_file_buffered_inner<'a>(
     path: &Path,
-    verbose: bool,
+    debug: bool,
     buffer: &'a mut [u8],
     completed_bytes: Option<&'a AtomicU64>,
 ) -> io::Result<Option<FileStats>> {
-    let mut reader = ReusableBufReader::new(File::open(path)?, buffer, completed_bytes);
+    #[cfg(feature = "trace")]
+    let _file_context = crate::trace::file_context(path);
+    let _file_span = trace_span!("parse_file", Some(path));
+    let file = {
+        let _open_span = trace_span!("file_open", Some(path));
+        File::open(path)?
+    };
+    trace_event!("file_opened", Some(path), serde_json::json!({}));
+    let mut reader = ReusableBufReader::new(file, buffer, completed_bytes);
 
     let language_id = {
+        let _prefix_span = trace_span!("read_prefix", Some(path));
         let prefix = read_prefix(&mut reader)?;
+        trace_event!(
+            "prefix_read",
+            Some(path),
+            serde_json::json!({"bytes": prefix.len()})
+        );
         let Some(contents_prefix) = text_prefix(prefix) else {
+            trace_event!(
+                "file_skip",
+                Some(path),
+                serde_json::json!({"reason": "binary"})
+            );
             return Ok(None);
         };
+        let _detect_span = trace_span!("detect_language", Some(path));
         language::detect_path(path, Some(contents_prefix))
     };
 
     match language_id {
         Some(language_id) => {
             let language = language::get(language_id);
+            trace_event!(
+                "language_detected",
+                Some(path),
+                serde_json::json!({"language": language.name})
+            );
+            let _count_span = trace_span!("count_lines", Some(path));
             let stats = count_lines(reader, language)?;
+            trace_event!(
+                "file_counted",
+                Some(path),
+                serde_json::json!({"lines": stats.lines, "code": stats.code, "comments": stats.comments, "blanks": stats.blanks})
+            );
             Ok(Some(FileStats::Known { language_id, stats }))
         }
         None => {
+            trace_event!("language_unknown", Some(path), serde_json::json!({}));
+            let _count_span = trace_span!("count_lines", Some(path));
             let stats = count_lines(reader, &UNKNOWN)?;
-            let format = verbose.then(|| unknown_format(path)).flatten();
+            let format = debug.then(|| unknown_format(path)).flatten();
+            trace_event!(
+                "file_counted",
+                Some(path),
+                serde_json::json!({"lines": stats.lines, "code": stats.code, "comments": stats.comments, "blanks": stats.blanks, "unknown_format": format})
+            );
             Ok(Some(FileStats::Unknown { format, stats }))
         }
     }
@@ -146,7 +184,13 @@ impl Read for ReusableBufReader<'_> {
 impl BufRead for ReusableBufReader<'_> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         if self.position == self.filled {
+            let _read_span = trace_span!("file_read", None);
             self.filled = self.file.read(self.buffer)?;
+            trace_event!(
+                "read_chunk",
+                None,
+                serde_json::json!({"bytes": self.filled})
+            );
             self.position = 0;
             if let Some(completed_bytes) = self.completed_bytes {
                 completed_bytes.fetch_add(self.filled as u64, Ordering::Relaxed);
@@ -193,6 +237,8 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
             for newline in memchr_iter(b'\n', buffer) {
                 let end = newline + 1;
                 let line = &buffer[start..end];
+                #[cfg(feature = "trace")]
+                let before = (stats.code, stats.comments, stats.blanks);
 
                 if let Some(mut state) = long_line.take() {
                     state.push(line, &mut block_comment);
@@ -224,6 +270,15 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
                     state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
                     partial_line.clear();
                 }
+                #[cfg(feature = "trace")]
+                trace_event!(
+                    "line_classified",
+                    None,
+                    serde_json::json!({
+                        "line": stats.lines,
+                        "class": if stats.code > before.0 { "code" } else if stats.comments > before.1 { "comment" } else { "blank" }
+                    })
+                );
 
                 start = end;
                 if next_block.is_some_and(|at| at < end) {
@@ -254,6 +309,8 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
         reader.consume(consumed);
     }
 
+    #[cfg(feature = "trace")]
+    let before = (stats.code, stats.comments, stats.blanks);
     if let Some(state) = long_line {
         state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
     } else if !partial_line.is_empty() {
@@ -264,6 +321,17 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
             &mut multiline_quote,
             &mut stats,
             true,
+        );
+    }
+    #[cfg(feature = "trace")]
+    if stats.lines > before.0 + before.1 + before.2 {
+        trace_event!(
+            "line_classified",
+            None,
+            serde_json::json!({
+                "line": stats.lines,
+                "class": if stats.code > before.0 { "code" } else if stats.comments > before.1 { "comment" } else { "blank" }
+            })
         );
     }
 
@@ -289,6 +357,11 @@ fn count_plain_lines(mut reader: impl BufRead) -> io::Result<Stats> {
             for end in memchr_iter(b'\n', buffer) {
                 line_has_code |= contains_non_whitespace(&buffer[start..end]);
                 stats.lines += 1;
+                trace_event!(
+                    "line_classified",
+                    None,
+                    serde_json::json!({"line": stats.lines, "class": if line_has_code {"code"} else {"blank"}})
+                );
                 if line_has_code {
                     stats.code += 1;
                 } else {
@@ -311,6 +384,11 @@ fn count_plain_lines(mut reader: impl BufRead) -> io::Result<Stats> {
 
     if line_pending {
         stats.lines += 1;
+        trace_event!(
+            "line_classified",
+            None,
+            serde_json::json!({"line": stats.lines, "class": if line_has_code {"code"} else {"blank"}})
+        );
         if line_has_code {
             stats.code += 1;
         } else {

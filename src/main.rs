@@ -1,7 +1,43 @@
+#[cfg(feature = "trace")]
+#[macro_export]
+macro_rules! trace_event {
+    ($name:expr, $path:expr, $detail:expr) => {
+        if crate::trace::enabled() {
+            crate::trace::event($name, $path, $detail);
+        }
+    };
+}
+
+#[cfg(not(feature = "trace"))]
+#[macro_export]
+macro_rules! trace_event {
+    ($($arg:tt)*) => {};
+}
+
+#[cfg(feature = "trace")]
+#[macro_export]
+macro_rules! trace_span {
+    ($name:expr, $path:expr) => {
+        crate::trace::span($name, $path)
+    };
+}
+
+#[cfg(not(feature = "trace"))]
+#[macro_export]
+macro_rules! trace_span {
+    ($($arg:tt)*) => {
+        ()
+    };
+}
+
+mod debug;
 mod dir;
 mod file;
 mod language;
 mod output;
+#[cfg(feature = "trace")]
+mod trace;
+mod trace_output;
 mod update;
 
 use dir::scan_directory;
@@ -31,9 +67,9 @@ struct Args {
     #[option(short = 'j', long = "threads")]
     threads: Option<usize>,
 
-    /// Print extra diagnostics, including unknown file formats.
-    #[flag(short = 'v', long = "verbose")]
-    verbose: bool,
+    /// Print diagnostics; use --debug=max for a full trace.
+    #[option(short = 'd', long = "debug", default = DebugLevel::Off, optional = "summary", equals = true, value_name = "LEVEL")]
+    debug: DebugLevel,
 
     /// Output results as JSON.
     #[flag(long = "json")]
@@ -44,8 +80,25 @@ struct Args {
     path: PathBuf,
 }
 
+#[argue::args]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DebugLevel {
+    Off,
+    Summary,
+    Max,
+}
+
 fn main() {
     if let Err(error) = run() {
+        #[cfg(feature = "trace")]
+        if trace::enabled() {
+            trace_event!(
+                "run_error",
+                None,
+                serde_json::json!({"error": error.to_string()})
+            );
+            let _ = trace::finish();
+        }
         if error.kind() == ErrorKind::BrokenPipe {
             return;
         }
@@ -61,7 +114,35 @@ fn run() -> io::Result<()> {
         return Ok(());
     }
 
-    let metadata = std::fs::metadata(&args.path)?;
+    let max_debug = args.debug == DebugLevel::Max;
+    #[cfg(not(feature = "trace"))]
+    if max_debug {
+        return Err(io::Error::new(
+            ErrorKind::Unsupported,
+            "--debug=max requires a build with --features trace",
+        ));
+    }
+    let trace_output = trace_output::TraceOutput::current()?;
+    if trace_output.matches_file(&args.path) {
+        return Err(io::Error::new(
+            ErrorKind::InvalidInput,
+            format!("{} is tally's trace output", args.path.display()),
+        ));
+    }
+    #[cfg(feature = "trace")]
+    if max_debug {
+        trace::start()?;
+    }
+    trace_event!(
+        "run_start",
+        Some(&args.path),
+        serde_json::json!({"all": args.all, "json": args.json, "threads": args.threads})
+    );
+
+    let metadata = {
+        let _span = trace_span!("path_metadata", Some(&args.path));
+        std::fs::metadata(&args.path)?
+    };
     let path_is_dir = metadata.is_dir();
     if !path_is_dir && !metadata.is_file() {
         return Err(io::Error::new(
@@ -74,25 +155,32 @@ fn run() -> io::Result<()> {
     }
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
-    let verbose = args.verbose;
+    let debug = args.debug != DebugLevel::Off;
     let sink = file::Sink::new();
     let progress = std::io::stderr().is_terminal().then(|| {
         let (progress_done, done) = mpsc::channel();
         (progress_done, show_progress(Arc::clone(&sink), done))
     });
 
-    if path_is_dir {
-        scan_directory(
-            &args.path,
-            Arc::clone(&sink),
-            !args.all,
-            threads,
-            adaptive_threads,
-            verbose,
-        )?;
-    } else {
-        parse_single_file(&args.path, &sink, verbose)?;
-    }
+    let timer = debug.then(debug::Timer::start);
+    let scan = {
+        let _span = trace_span!("scan", Some(&args.path));
+        if path_is_dir {
+            Some(scan_directory(
+                &args.path,
+                Arc::clone(&sink),
+                !args.all,
+                threads,
+                adaptive_threads,
+                debug,
+            )?)
+        } else {
+            parse_single_file(&args.path, &sink, debug)?;
+            None
+        }
+    };
+    let timing = timer.map(debug::Timer::finish);
+    trace_event!("scan_complete", Some(&args.path), serde_json::json!({}));
 
     if let Some((progress_done, progress)) = progress {
         let _ = progress_done.send(());
@@ -100,14 +188,28 @@ fn run() -> io::Result<()> {
     }
 
     let summary = sink.snapshot();
-    if args.json {
-        output::print_json(&summary)?;
-    } else {
-        output::print_summary(&summary, std::io::stdout().is_terminal())?;
-    }
+    trace_event!(
+        "summary_snapshot",
+        None,
+        serde_json::json!({"files": summary.all.files, "lines": summary.all.lines})
+    );
+    {
+        let _span = trace_span!("output", None);
+        if args.json {
+            output::print_json(&summary)?;
+        } else {
+            output::print_summary(&summary, std::io::stdout().is_terminal())?;
+        }
 
-    if verbose {
-        output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
+        if let Some(timing) = timing {
+            debug::print(timing, scan, &summary)?;
+            output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
+        }
+    }
+    #[cfg(feature = "trace")]
+    if max_debug {
+        let path = trace::finish()?;
+        eprintln!("Trace appended to {}", path.display());
     }
     Ok(())
 }
@@ -133,9 +235,11 @@ fn default_threads(path_is_dir: bool) -> usize {
     std::thread::available_parallelism().map_or(1, usize::from)
 }
 
-fn parse_single_file(path: &Path, sink: &file::Sink, verbose: bool) -> io::Result<()> {
+fn parse_single_file(path: &Path, sink: &file::Sink, debug: bool) -> io::Result<()> {
+    #[cfg(feature = "trace")]
+    let _file_context = trace::file_context(path);
     let mut batch = Batch::default();
-    if let Some(file_stats) = parse_file(path, verbose)? {
+    if let Some(file_stats) = parse_file(path, debug)? {
         batch.add(file_stats);
     }
     sink.record_progress(batch.files());
@@ -191,7 +295,7 @@ mod tests {
         let args = Args::parse_from(["tally"]).unwrap();
 
         assert!(!args.all);
-        assert!(!args.verbose);
+        assert_eq!(args.debug, DebugLevel::Off);
         assert!(!args.json);
         assert!(!args.version);
         assert_eq!(args.threads, None);
@@ -200,10 +304,10 @@ mod tests {
 
     #[test]
     fn args_parse_flags_options_and_path() {
-        let args = Args::parse_from(["tally", "--all", "--json", "-v", "-j", "2", "src"]).unwrap();
+        let args = Args::parse_from(["tally", "--all", "--json", "-d", "-j", "2", "src"]).unwrap();
 
         assert!(args.all);
-        assert!(args.verbose);
+        assert_eq!(args.debug, DebugLevel::Summary);
         assert!(args.json);
         assert_eq!(args.threads, Some(2));
         assert_eq!(args.path, PathBuf::from("src"));

@@ -52,10 +52,17 @@ impl Rules {
 }
 
 fn matcher(path: &Path, failed: &AtomicBool) -> Gitignore {
+    let _span = trace_span!("load_ignore_rules", Some(path));
     if !path.is_file() {
+        trace_event!("ignore_rules_absent", Some(path), serde_json::json!({}));
         return Gitignore::empty();
     }
     let (matcher, error) = Gitignore::new(path);
+    trace_event!(
+        "ignore_rules_loaded",
+        Some(path),
+        serde_json::json!({"patterns": matcher.len(), "error": error.is_some()})
+    );
     if let Some(error) = error {
         eprintln!("failed to read ignore rules {}: {error}", path.display());
         failed.store(true, Ordering::Relaxed);
@@ -99,7 +106,9 @@ fn exclude_matcher(dir: &Path, failed: &AtomicBool) -> Gitignore {
         return Gitignore::empty();
     };
     let path = git_dir.join("info/exclude");
+    let _span = trace_span!("load_exclude_rules", Some(&path));
     if !path.is_file() {
+        trace_event!("exclude_rules_absent", Some(&path), serde_json::json!({}));
         return Gitignore::empty();
     }
     let mut builder = GitignoreBuilder::new(dir);
@@ -124,6 +133,7 @@ pub(super) fn extend_rules(
     failed: &AtomicBool,
 ) -> Option<Arc<Rules>> {
     let git_root = ignore_git && dir.join(".git").exists();
+    let _span = trace_span!("extend_rules", Some(dir));
     let ignore = matcher(&dir.join(".ignore"), failed);
     let gitignore = if ignore_git {
         matcher(&dir.join(".gitignore"), failed)
@@ -136,8 +146,14 @@ pub(super) fn extend_rules(
         Gitignore::empty()
     };
     if !git_root && ignore.is_empty() && gitignore.is_empty() && exclude.is_empty() {
+        trace_event!("rules_inherited", Some(dir), serde_json::json!({}));
         return parent;
     }
+    trace_event!(
+        "rules_extended",
+        Some(dir),
+        serde_json::json!({"ignore": ignore.len(), "gitignore": gitignore.len(), "exclude": exclude.len()})
+    );
     Some(Arc::new(Rules {
         parent,
         git_root,
