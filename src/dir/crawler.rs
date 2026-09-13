@@ -4,7 +4,7 @@ mod metrics;
 mod rules;
 mod workers;
 
-use super::scan_result;
+use super::{scan_result, report_file_error};
 use crate::file;
 use crate::trace_output::TraceOutput;
 use crossbeam_queue::ArrayQueue;
@@ -120,8 +120,9 @@ fn list_directory(
     let entries = match fs::read_dir(&job.path) {
         Ok(entries) => entries,
         Err(error) => {
-            eprintln!("failed to read directory {}: {error}", job.path.display());
-            failed.store(true, Ordering::Relaxed);
+            if report_file_error(&job.path, &error) {
+                failed.store(true, Ordering::Relaxed);
+            }
             return;
         }
     };
@@ -133,19 +134,18 @@ fn list_directory(
         let entry = match entry {
             Ok(entry) => entry,
             Err(error) => {
-                eprintln!(
-                    "failed to read directory entry in {}: {error}",
-                    job.path.display()
-                );
-                failed.store(true, Ordering::Relaxed);
+                if report_file_error(&job.path, &error) {
+                    failed.store(true, Ordering::Relaxed);
+                }
                 continue;
             }
         };
         let kind = match entry.file_type() {
             Ok(kind) => kind,
             Err(error) => {
-                eprintln!("failed to inspect {}: {error}", entry.path().display());
-                failed.store(true, Ordering::Relaxed);
+                if report_file_error(&entry.path(), &error) {
+                    failed.store(true, Ordering::Relaxed);
+                }
                 continue;
             }
         };
@@ -255,8 +255,9 @@ pub(super) fn scan(
     let global = if ignore_git {
         let (global, error) = Gitignore::global();
         if let Some(error) = error {
-            eprintln!("failed to read global ignore rules: {error}");
-            failed.store(true, Ordering::Relaxed);
+            if crate::dir::report_walk_error(&error) {
+                failed.store(true, Ordering::Relaxed);
+            }
         }
         global
     } else {

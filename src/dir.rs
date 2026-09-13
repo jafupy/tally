@@ -4,6 +4,7 @@ pub(crate) use crawler::ScanReport;
 
 use crate::file::{self, Batch};
 use std::io;
+use ignore::Error;
 use ignore::overrides::Override;
 use std::path::Path;
 use std::sync::{
@@ -30,6 +31,29 @@ fn scan_result(failed: bool) -> io::Result<()> {
         Err(io::Error::other("directory scan was incomplete"))
     } else {
         Ok(())
+    }
+}
+
+fn report_walk_error(error: &Error) -> bool {
+    if error
+        .io_error()
+        .is_some_and(|error| error.kind() == io::ErrorKind::PermissionDenied)
+    {
+        eprintln!("skipping inaccessible path: {error}");
+        false
+    } else {
+        eprintln!("failed to read directory entry: {error}");
+        true
+    }
+}
+
+fn report_file_error(path: &Path, error: &io::Error) -> bool {
+    if error.kind() == io::ErrorKind::PermissionDenied {
+        eprintln!("skipping inaccessible file {}: {error}", path.display());
+        false
+    } else {
+        eprintln!("failed to read file {}: {error}", path.display());
+        true
     }
 }
 
@@ -63,8 +87,9 @@ impl ScanWorker {
                     Some(path),
                     serde_json::json!({"error": error.to_string()})
                 );
-                eprintln!("failed to read file {}: {error}", path.display());
-                self.failed.store(true, Ordering::Relaxed);
+                if report_file_error(path, &error) {
+                    self.failed.store(true, Ordering::Relaxed);
+                }
             }
         }
     }
