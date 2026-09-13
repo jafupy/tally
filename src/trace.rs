@@ -120,10 +120,6 @@ pub fn enabled() -> bool {
     TRACE.get().is_some()
 }
 
-pub fn is_output_path(path: &Path) -> bool {
-    TRACE.get().is_some_and(|recorder| recorder.path == path)
-}
-
 pub fn event(name: &'static str, path: Option<&Path>, detail: Value) {
     let Some(recorder) = TRACE.get() else {
         return;

@@ -37,6 +37,7 @@ mod language;
 mod output;
 #[cfg(feature = "trace")]
 mod trace;
+mod trace_output;
 mod update;
 
 use dir::scan_directory;
@@ -119,6 +120,13 @@ fn run() -> io::Result<()> {
         return Err(io::Error::new(
             ErrorKind::Unsupported,
             "--debug=max requires a build with --features trace",
+        ));
+    }
+    let trace_output = trace_output::TraceOutput::current()?;
+    if trace_output.matches_file(&args.path) {
+        return Err(io::Error::new(
+            ErrorKind::InvalidInput,
+            format!("{} is tally's trace output", args.path.display()),
         ));
     }
     #[cfg(feature = "trace")]

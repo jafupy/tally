@@ -6,6 +6,7 @@ mod workers;
 
 use super::scan_result;
 use crate::file;
+use crate::trace_output::TraceOutput;
 use crossbeam_queue::ArrayQueue;
 use ignore::gitignore::Gitignore;
 use metrics::Counters;
@@ -30,6 +31,7 @@ struct DirectoryJob {
 }
 
 struct Shared {
+    trace_output: TraceOutput,
     directories: ArrayQueue<DirectoryJob>,
     files: ArrayQueue<Vec<PathBuf>>,
     pending_directories: AtomicUsize,
@@ -168,8 +170,7 @@ fn list_directory(
             continue;
         }
         let path = entry.path();
-        #[cfg(feature = "trace")]
-        if crate::trace::is_output_path(&path) {
+        if shared.trace_output.matches_entry(&path) {
             trace_event!(
                 "entry_skip",
                 Some(&path),
@@ -252,6 +253,7 @@ pub(super) fn scan(
         Gitignore::empty()
     };
     let shared = Arc::new(Shared {
+        trace_output: TraceOutput::current()?,
         directories: ArrayQueue::new(DIR_QUEUE_CAPACITY),
         files: ArrayQueue::new(FILE_QUEUE_CAPACITY),
         pending_directories: AtomicUsize::new(1),

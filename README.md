@@ -22,6 +22,7 @@ For a detailed timestamped JSONL trace, build with `cargo build --release --feat
 and run `tally --debug=max .`. This appends to `.tallydebug` in the current
 directory. It records per-file and per-line activity, so traces of large trees
 can be very large. `clock_count` is a monotonic clock tick count (not CPU cycles).
+Tally excludes this trace file from directory scans and rejects it as an explicit input.
 
 ## Install
 
