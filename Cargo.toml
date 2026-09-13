@@ -8,6 +8,7 @@ license = "GPL-3.0-or-later"
 argue = { git = "https://github.com/jafupy/argue" }
 crossbeam-channel = "0.5"
 ignore = "0.4"
+libc = "0.2"
 memchr = "2"
 regex = { version = "1", default-features = false, features = ["perf", "std"] }
 semver = "1"

@@ -1,22 +1,15 @@
+mod direct_dynamic;
+
 use crate::file::{self, Batch};
-use crossbeam_channel::{Receiver, SendTimeoutError, Sender, TryRecvError, TrySendError, bounded};
-use ignore::{DirEntry, Error, WalkBuilder, WalkParallel, WalkState};
+use ignore::{DirEntry, Error, WalkBuilder, WalkState};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
 
 const FLUSH_EVERY_FILES: u64 = 512;
-const ADAPTIVE_SMALL_FILE_LIMIT: usize = 8;
-const ADAPTIVE_SMALL_BYTE_LIMIT: u64 = 32 * 1024 * 1024;
-const ADAPTIVE_QUEUE_CAPACITY: usize = 512;
-const ADAPTIVE_CALIBRATION_WORKERS: usize = 2;
-const ADAPTIVE_CONTROL_INTERVAL: Duration = Duration::from_millis(10);
-const ADAPTIVE_MIN_IMPROVEMENT: f64 = 1.00;
 
 pub fn scan_directory(
     path: &Path,
@@ -27,17 +20,18 @@ pub fn scan_directory(
     verbose: bool,
 ) -> io::Result<()> {
     if adaptive_threads && threads > 1 {
-        let producer_threads = 1;
-        let mut builder = walk_builder(path, ignore_git);
-        builder.threads(producer_threads);
-        return scan_directory_adaptive(
-            path,
-            || builder.build_parallel(),
-            sink,
-            threads.saturating_sub(producer_threads).max(1),
-            threads,
-            verbose,
-        );
+        // Sub-walks would also load .ignore rules above the requested root,
+        // which -a's ordinary walk does not do.
+        let ancestor_ignore = !ignore_git
+            && path.canonicalize().ok().is_some_and(|root| {
+                root.ancestors()
+                    .skip(1)
+                    .any(|dir| dir.join(".ignore").exists())
+            });
+        if ancestor_ignore {
+            return scan_directory(path, sink, ignore_git, threads.min(3), false, verbose);
+        }
+        return direct_dynamic::scan(path, ignore_git, threads, sink, verbose);
     }
 
     if threads <= 1 {
@@ -58,333 +52,13 @@ pub fn scan_directory(
             verbose,
             failed: Arc::clone(&failed),
             buffer: file::read_buffer(),
+            completed_bytes: None,
+            completed_files: None,
         };
 
         Box::new(move |entry| worker.visit(entry))
     });
     scan_result(failed.load(Ordering::Relaxed))
-}
-
-fn scan_directory_adaptive(
-    root: &Path,
-    build_walker: impl FnOnce() -> WalkParallel + Send,
-    sink: Arc<file::Sink>,
-    initial_max_threads: usize,
-    max_threads: usize,
-    verbose: bool,
-) -> io::Result<()> {
-    let root = root.to_path_buf();
-    let walk_failed = Arc::new(AtomicBool::new(false));
-    let (path_sender, path_receiver) = bounded(ADAPTIVE_QUEUE_CAPACITY);
-    let handoff_sender = path_sender.clone();
-    let (walk_done_sender, walk_done) = bounded(1);
-
-    let scan_failed = std::thread::scope(|scope| {
-        let failed = Arc::clone(&walk_failed);
-        scope.spawn(move || {
-            build_walker().run(|| {
-                let sender = path_sender.clone();
-                let failed = Arc::clone(&failed);
-                let root = root.clone();
-                Box::new(move |entry| match entry {
-                    Ok(entry)
-                        if entry.path() != root
-                            && entry.file_type().is_some_and(|kind| kind.is_file()) =>
-                    {
-                        if sender.send(entry.into_path()).is_err() {
-                            WalkState::Quit
-                        } else {
-                            WalkState::Continue
-                        }
-                    }
-                    Ok(_) => WalkState::Continue,
-                    Err(err) => {
-                        eprintln!("failed to read directory entry: {err}");
-                        failed.store(true, Ordering::Relaxed);
-                        WalkState::Continue
-                    }
-                })
-            });
-            drop(path_sender);
-            let _ = walk_done_sender.send(());
-        });
-
-        let mut pending = Vec::with_capacity(ADAPTIVE_SMALL_FILE_LIMIT + 1);
-        let mut walking = true;
-        while pending.len() <= ADAPTIVE_SMALL_FILE_LIMIT && walking {
-            match path_receiver.recv_timeout(ADAPTIVE_CONTROL_INTERVAL) {
-                Ok(path) => pending.push(path),
-                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                    walking = !matches!(
-                        walk_done.try_recv(),
-                        Ok(()) | Err(TryRecvError::Disconnected)
-                    );
-                }
-                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => walking = false,
-            }
-        }
-
-        if !walking {
-            pending.extend(path_receiver.try_iter());
-        }
-
-        if pending.len() <= ADAPTIVE_SMALL_FILE_LIMIT && !pending_is_large(&pending) {
-            drop(handoff_sender);
-            return !scan_file_list(pending, sink, verbose);
-        }
-
-        let pool_max_threads = if walking {
-            initial_max_threads
-        } else {
-            max_threads
-        };
-        let mut pool =
-            AdaptivePool::new(path_receiver, Arc::clone(&sink), verbose, pool_max_threads);
-        for path in pending {
-            pool.send(&handoff_sender, path);
-        }
-        drop(handoff_sender);
-        pool.finish(walking, &walk_done, max_threads)
-    });
-
-    scan_result(walk_failed.load(Ordering::Relaxed) || scan_failed)
-}
-
-fn pending_is_large(paths: &[PathBuf]) -> bool {
-    if paths.len() < 2 {
-        return false;
-    }
-
-    paths
-        .iter()
-        .filter_map(|path| std::fs::metadata(path).ok())
-        .map(|metadata| metadata.len())
-        .try_fold(0_u64, |total, bytes| {
-            let total = total.saturating_add(bytes);
-            (total < ADAPTIVE_SMALL_BYTE_LIMIT).then_some(total)
-        })
-        .is_none()
-}
-
-struct AdaptivePool {
-    receiver: Receiver<PathBuf>,
-    sink: Arc<file::Sink>,
-    verbose: bool,
-    max_threads: usize,
-    completed_bytes: Arc<AtomicU64>,
-    completed_files: Arc<AtomicU64>,
-    drained: Receiver<()>,
-    drained_sender: Sender<()>,
-    failed: Arc<AtomicBool>,
-    workers: Vec<JoinHandle<()>>,
-    active_workers: usize,
-    trial_rate: Option<Throughput>,
-    scaling_finished: bool,
-    sampled_at: Instant,
-    sampled_bytes: u64,
-    sampled_files: u64,
-}
-
-#[derive(Clone, Copy)]
-struct Throughput {
-    bytes: f64,
-    files: f64,
-}
-
-impl AdaptivePool {
-    fn new(
-        receiver: Receiver<PathBuf>,
-        sink: Arc<file::Sink>,
-        verbose: bool,
-        max_threads: usize,
-    ) -> Self {
-        let (drained_sender, drained) = bounded(1);
-        let mut pool = Self {
-            receiver,
-            sink,
-            verbose,
-            max_threads,
-            completed_bytes: Arc::new(AtomicU64::new(0)),
-            completed_files: Arc::new(AtomicU64::new(0)),
-            drained,
-            drained_sender,
-            failed: Arc::new(AtomicBool::new(false)),
-            workers: Vec::new(),
-            active_workers: 0,
-            trial_rate: None,
-            scaling_finished: false,
-            sampled_at: Instant::now(),
-            sampled_bytes: 0,
-            sampled_files: 0,
-        };
-        pool.add_worker();
-        pool
-    }
-
-    fn send(&mut self, sender: &Sender<PathBuf>, mut path: PathBuf) {
-        loop {
-            match sender.send_timeout(path, ADAPTIVE_CONTROL_INTERVAL) {
-                Ok(()) => break,
-                Err(SendTimeoutError::Timeout(returned)) => {
-                    path = returned;
-                    self.adjust_workers();
-                }
-                Err(SendTimeoutError::Disconnected(_)) => return,
-            }
-        }
-        self.adjust_workers();
-    }
-
-    fn adjust_workers(&mut self) {
-        if self.scaling_finished {
-            return;
-        }
-
-        let now = Instant::now();
-        let completed_bytes = self.completed_bytes.load(Ordering::Relaxed);
-        let completed_files = self.completed_files.load(Ordering::Relaxed);
-        if self.receiver.is_empty() {
-            self.sampled_at = now;
-            self.sampled_bytes = completed_bytes;
-            self.sampled_files = completed_files;
-            self.trial_rate = None;
-            return;
-        }
-        if self.sampled_at.elapsed() < ADAPTIVE_CONTROL_INTERVAL {
-            return;
-        }
-
-        let bytes = completed_bytes - self.sampled_bytes;
-        let files = completed_files - self.sampled_files;
-        if bytes == 0 && files == 0 {
-            self.sampled_at = now;
-            return;
-        }
-        let elapsed = now.duration_since(self.sampled_at).as_secs_f64();
-        let rate = Throughput {
-            bytes: bytes as f64 / elapsed,
-            files: files as f64 / elapsed,
-        };
-        self.sampled_at = now;
-        self.sampled_bytes = completed_bytes;
-        self.sampled_files = completed_files;
-
-        if let Some(previous_rate) = self.trial_rate.take() {
-            let improved = if rate.bytes > 0.0 && previous_rate.bytes > 0.0 {
-                rate.bytes >= previous_rate.bytes * ADAPTIVE_MIN_IMPROVEMENT
-            } else {
-                rate.files >= previous_rate.files * ADAPTIVE_MIN_IMPROVEMENT
-            };
-            if !improved && self.active_workers >= ADAPTIVE_CALIBRATION_WORKERS {
-                self.scaling_finished = true;
-                return;
-            }
-        }
-
-        if !self.receiver.is_empty() && self.active_workers < self.max_threads {
-            self.trial_rate = Some(rate);
-            self.add_worker();
-        }
-    }
-
-    fn add_worker(&mut self) {
-        let receiver = self.receiver.clone();
-        let sink = Arc::clone(&self.sink);
-        let completed_bytes = Arc::clone(&self.completed_bytes);
-        let completed_files = Arc::clone(&self.completed_files);
-        let drained = self.drained_sender.clone();
-        let failed = Arc::clone(&self.failed);
-        let verbose = self.verbose;
-        let handle = std::thread::spawn(move || {
-            let mut batch = Batch::default();
-            let mut buffer = file::read_buffer();
-            while let Ok(path) = receiver.recv() {
-                match file::parse_file_buffered_with_progress(
-                    &path,
-                    verbose,
-                    &mut buffer,
-                    &completed_bytes,
-                ) {
-                    Ok(Some(stats)) => batch.add(stats),
-                    Ok(None) => {}
-                    Err(error) => {
-                        eprintln!("failed to read file {}: {error}", path.display());
-                        failed.store(true, Ordering::Relaxed);
-                    }
-                }
-                completed_files.fetch_add(1, Ordering::Relaxed);
-                if batch.files() >= FLUSH_EVERY_FILES {
-                    sink.record_progress(batch.files());
-                    sink.add_batch(&mut batch);
-                }
-                if receiver.is_empty() {
-                    match drained.try_send(()) {
-                        Ok(()) | Err(TrySendError::Full(())) => {}
-                        Err(TrySendError::Disconnected(())) => break,
-                    }
-                }
-            }
-            sink.record_progress(batch.files());
-            sink.add_batch(&mut batch);
-        });
-        self.workers.push(handle);
-        self.active_workers += 1;
-    }
-
-    fn finish(
-        mut self,
-        mut walking: bool,
-        walk_done: &Receiver<()>,
-        final_max_threads: usize,
-    ) -> bool {
-        while walking || !self.receiver.is_empty() {
-            if walking {
-                match walk_done.try_recv() {
-                    Ok(()) | Err(TryRecvError::Disconnected) => {
-                        walking = false;
-                        self.max_threads = final_max_threads;
-                    }
-                    Err(TryRecvError::Empty) => {}
-                }
-            }
-            if !walking && self.receiver.is_empty() {
-                break;
-            }
-            self.adjust_workers();
-            let _ = self.drained.recv_timeout(ADAPTIVE_CONTROL_INTERVAL);
-        }
-        for worker in self.workers.drain(..) {
-            worker.join().unwrap();
-        }
-        self.failed.load(Ordering::Relaxed)
-    }
-}
-
-fn scan_file_list(files: Vec<PathBuf>, sink: Arc<file::Sink>, verbose: bool) -> bool {
-    let mut batch = Batch::default();
-    let mut buffer = file::read_buffer();
-    let mut succeeded = true;
-
-    for path in files {
-        match file::parse_file_buffered(&path, verbose, &mut buffer) {
-            Ok(Some(stats)) => batch.add(stats),
-            Ok(None) => continue,
-            Err(error) => {
-                eprintln!("failed to read file {}: {error}", path.display());
-                succeeded = false;
-                continue;
-            }
-        }
-
-        if batch.files() >= FLUSH_EVERY_FILES {
-            sink.record_progress(batch.files());
-            sink.add_batch(&mut batch);
-        }
-    }
-
-    sink.record_progress(batch.files());
-    sink.add_batch(&mut batch);
-    succeeded
 }
 
 fn scan_directory_serial(
@@ -401,6 +75,8 @@ fn scan_directory_serial(
         verbose,
         failed: Arc::clone(&failed),
         buffer: file::read_buffer(),
+        completed_bytes: None,
+        completed_files: None,
     };
 
     for entry in walk_builder(path, ignore_git).build() {
@@ -427,7 +103,8 @@ fn walk_builder(path: &Path, ignore_git: bool) -> WalkBuilder {
         .git_ignore(ignore_git)
         .git_global(ignore_git)
         .git_exclude(ignore_git)
-        .parents(ignore_git);
+        .parents(ignore_git)
+        .require_git(false);
     builder
 }
 
@@ -438,6 +115,8 @@ struct ScanWorker {
     verbose: bool,
     failed: Arc<AtomicBool>,
     buffer: Vec<u8>,
+    completed_bytes: Option<Arc<AtomicU64>>,
+    completed_files: Option<Arc<AtomicU64>>,
 }
 
 impl ScanWorker {
@@ -460,7 +139,16 @@ impl ScanWorker {
     }
 
     fn visit_path(&mut self, path: &Path) {
-        match file::parse_file_buffered(path, self.verbose, &mut self.buffer) {
+        let result = match &self.completed_bytes {
+            Some(bytes) => {
+                file::parse_file_buffered_with_progress(path, self.verbose, &mut self.buffer, bytes)
+            }
+            None => file::parse_file_buffered(path, self.verbose, &mut self.buffer),
+        };
+        if let Some(files) = &self.completed_files {
+            files.fetch_add(1, Ordering::Relaxed);
+        }
+        match result {
             Ok(Some(stats)) => {
                 self.batch.add(stats);
                 if self.batch.files() >= FLUSH_EVERY_FILES {
@@ -492,7 +180,6 @@ mod tests {
     use super::*;
     use std::{
         fs,
-        sync::atomic::AtomicUsize,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -525,14 +212,14 @@ mod tests {
     }
 
     #[test]
-    fn adaptive_handoff_processes_every_discovered_file_once() {
+    fn adaptive_scan_processes_every_discovered_file_once() {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let root = std::env::temp_dir().join(format!("tally-adaptive-{unique}"));
         fs::create_dir(&root).unwrap();
-        for index in 0..=ADAPTIVE_SMALL_FILE_LIMIT {
+        for index in 0..9 {
             fs::write(root.join(format!("source.unique-{index}")), b"one line\n").unwrap();
         }
 
@@ -541,42 +228,9 @@ mod tests {
         scan_directory(&root, Arc::clone(&sink), false, 4, true, true).unwrap();
 
         let summary = sink.snapshot();
-        assert_eq!(summary.all.files, (ADAPTIVE_SMALL_FILE_LIMIT + 1) as u64);
-        assert_eq!(summary.unknown_formats.len(), ADAPTIVE_SMALL_FILE_LIMIT + 1);
+        assert_eq!(summary.all.files, 9);
+        assert_eq!(summary.unknown_formats.len(), 9);
         assert!(summary.unknown_formats.iter().all(|(_, files)| *files == 1));
-
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn adaptive_large_directory_consumes_one_walk() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("tally-single-walk-{unique}"));
-        fs::create_dir(&root).unwrap();
-        for index in 0..=ADAPTIVE_SMALL_FILE_LIMIT {
-            fs::write(root.join(format!("source-{index}.rs")), b"one line\n").unwrap();
-        }
-
-        let walker_builds = AtomicUsize::new(0);
-        scan_directory_adaptive(
-            &root,
-            || {
-                walker_builds.fetch_add(1, Ordering::Relaxed);
-                let mut builder = walk_builder(&root, false);
-                builder.threads(2);
-                builder.build_parallel()
-            },
-            file::Sink::new(),
-            2,
-            4,
-            false,
-        )
-        .unwrap();
-
-        assert_eq!(walker_builds.load(Ordering::Relaxed), 1);
 
         fs::remove_dir_all(root).unwrap();
     }
