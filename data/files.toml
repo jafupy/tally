@@ -1,4 +1,8 @@
 [[filenames]]
+name = "-"
+language = "Stdin"
+
+[[filenames]]
 name = "Dockerfile"
 language = "Dockerfile"
 

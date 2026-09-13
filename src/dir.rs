@@ -4,6 +4,7 @@ pub(crate) use crawler::ScanReport;
 
 use crate::file::{self, Batch};
 use std::io;
+use ignore::overrides::Override;
 use std::path::Path;
 use std::sync::{
     Arc,
@@ -19,8 +20,9 @@ pub fn scan_directory(
     threads: usize,
     adaptive_threads: bool,
     debug: bool,
+    overrides: Override,
 ) -> io::Result<ScanReport> {
-    crawler::scan(path, ignore_git, threads, adaptive_threads, sink, debug)
+    crawler::scan(path, ignore_git, threads, adaptive_threads, sink, debug, overrides)
 }
 
 fn scan_result(failed: bool) -> io::Result<()> {
@@ -104,7 +106,7 @@ mod tests {
 
         for ignore_git in [true, false] {
             let sink = file::Sink::new();
-            scan_directory(&root, Arc::clone(&sink), ignore_git, 1, false, true).unwrap();
+            scan_directory(&root, Arc::clone(&sink), ignore_git, 1, false, true, Override::empty()).unwrap();
             assert_eq!(sink.snapshot().all.files, 2);
         }
 
@@ -125,7 +127,7 @@ mod tests {
 
         let sink = file::Sink::new();
 
-        scan_directory(&root, Arc::clone(&sink), false, 4, true, true).unwrap();
+        scan_directory(&root, Arc::clone(&sink), false, 4, true, true, Override::empty()).unwrap();
 
         let summary = sink.snapshot();
         assert_eq!(summary.all.files, 9);

@@ -9,6 +9,7 @@ use crate::file;
 use crate::trace_output::TraceOutput;
 use crossbeam_queue::ArrayQueue;
 use ignore::gitignore::Gitignore;
+use ignore::overrides::Override;
 use metrics::Counters;
 pub(crate) use metrics::ScanReport;
 use rules::{Rules, extend_rules};
@@ -31,6 +32,7 @@ struct DirectoryJob {
 }
 
 struct Shared {
+    overrides: Override,
     trace_output: TraceOutput,
     directories: ArrayQueue<DirectoryJob>,
     files: ArrayQueue<Vec<PathBuf>>,
@@ -180,10 +182,17 @@ fn list_directory(
         }
         let ignored = {
             let _match_span = trace_span!("match_ignore", Some(&path));
+            let matched = shared.overrides.matched(&path, is_dir);
+            if matched.is_ignore() {
+                true
+            } else if matched.is_whitelist() {
+                false
+            } else {
             rules
                 .as_ref()
                 .is_some_and(|rules| rules.ignored(&path, is_dir, global))
                 || (rules.is_none() && global.matched(&path, is_dir).is_ignore())
+            }
         };
         if ignored {
             trace_event!(
@@ -225,6 +234,7 @@ pub(super) fn scan(
     adaptive_threads: bool,
     sink: Arc<file::Sink>,
     debug: bool,
+    overrides: Override,
 ) -> io::Result<ScanReport> {
     let _span = trace_span!("crawler_scan", Some(root));
     let root = root.canonicalize()?;
@@ -253,6 +263,7 @@ pub(super) fn scan(
         Gitignore::empty()
     };
     let shared = Arc::new(Shared {
+        overrides,
         trace_output: TraceOutput::current()?,
         directories: ArrayQueue::new(DIR_QUEUE_CAPACITY),
         files: ArrayQueue::new(FILE_QUEUE_CAPACITY),

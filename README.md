@@ -24,6 +24,23 @@ directory. It records per-file and per-line activity, so traces of large trees
 can be very large. `clock_count` is a monotonic clock tick count (not CPU cycles).
 Tally excludes this trace file from directory scans and rejects it as an explicit input.
 
+Limit a scan with repeatable glob filters, or ask git for the relevant files:
+
+```sh
+tally --include '*.rs' --exclude 'target/**' .
+tally --tracked .
+tally . --diff          # compare the working tree against HEAD
+tally src --diff main   # compare src against main
+tally --diff            # default path . and revision HEAD
+tally --diff HEAD~1     # default path . with an explicit revision
+```
+
+Diff syntax is `tally [path] --diff [revision]`. Put an explicit path before
+`--diff`; the revision is optional and defaults to `HEAD`. Without `--diff`,
+Tally counts lines as usual.
+
+Use `tally -` to count text read from standard input.
+
 ## Install
 
 ```sh
