@@ -35,6 +35,7 @@ impl Sink {
 
     pub fn record_progress(&self, files: u64) {
         self.files.fetch_add(files, Ordering::Relaxed);
+        trace_event!("progress_update", None, serde_json::json!({"files": files}));
     }
 
     pub fn add_batch(&self, batch: &mut Batch) {
@@ -42,6 +43,12 @@ impl Sink {
             return;
         }
 
+        let _span = trace_span!("sink_merge_batch", None);
+        trace_event!(
+            "sink_batch",
+            None,
+            serde_json::json!({"files": batch.all.files, "lines": batch.all.lines})
+        );
         let mut sink = self.inner.lock().unwrap();
         sink.all += batch.all;
         sink.unknown += batch.unknown;
@@ -67,6 +74,7 @@ impl Sink {
     }
 
     pub fn snapshot(&self) -> Summary {
+        let _span = trace_span!("sink_snapshot", None);
         let sink = self.inner.lock().unwrap();
         let mut languages = sink
             .per_language
@@ -117,6 +125,16 @@ impl Default for Batch {
 
 impl Batch {
     pub fn add(&mut self, file_stats: FileStats) {
+        #[cfg(feature = "trace")]
+        let (lines, known) = match &file_stats {
+            FileStats::Known { stats, .. } => (stats.lines, true),
+            FileStats::Unknown { stats, .. } => (stats.lines, false),
+        };
+        trace_event!(
+            "batch_add_file",
+            None,
+            serde_json::json!({"lines": lines, "known": known})
+        );
         match file_stats {
             FileStats::Known { language_id, stats } => {
                 self.all += stats;
@@ -150,7 +168,7 @@ pub struct Summary {
     pub languages: Vec<(LanguageId, Stats)>,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, serde::Serialize)]
 pub struct Stats {
     pub files: u64,
     pub lines: u64,
