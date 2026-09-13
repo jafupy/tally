@@ -106,6 +106,7 @@ fn changed_files(
 fn patch(root: &Path, reference: &str, path: &Path) -> io::Result<Vec<u8>> {
     output(
         Command::new("git")
+            .arg("--literal-pathspecs")
             .args([
                 "diff",
                 "--no-color",
@@ -183,7 +184,7 @@ fn add_selected(
 }
 fn repo_prefix(root: &Path) -> io::Result<PathBuf> {
     let mut out = git(root, &["rev-parse", "--show-prefix"])?;
-    while out.last().is_some_and(|byte| byte.is_ascii_whitespace()) {
+    if out.last() == Some(&b'\n') {
         out.pop();
     }
     Ok(git_path(&out))
@@ -191,6 +192,7 @@ fn repo_prefix(root: &Path) -> io::Result<PathBuf> {
 fn revision_is_regular(root: &Path, reference: &str, path: &Path) -> io::Result<bool> {
     let out = output(
         Command::new("git")
+            .arg("--literal-pathspecs")
             .args(["ls-tree", "-z", "--end-of-options", reference, "--"])
             .arg(path)
             .current_dir(root),
