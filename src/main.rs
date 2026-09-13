@@ -27,7 +27,7 @@ struct Args {
     #[flag(short = 'a', long = "all")]
     all: bool,
 
-    /// Number of worker threads. Defaults adaptively to up to 8 workers for directories and 1 for a file.
+    /// Number of worker threads. Defaults to adaptive scaling for directories and 1 for a file.
     #[option(short = 'j', long = "threads")]
     threads: Option<usize>,
 
@@ -130,9 +130,7 @@ fn default_threads(path_is_dir: bool) -> usize {
         return 1;
     }
 
-    std::thread::available_parallelism()
-        .map_or(1, |threads| usize::from(threads).saturating_mul(2))
-        .min(8)
+    std::thread::available_parallelism().map_or(1, usize::from)
 }
 
 fn parse_single_file(path: &Path, sink: &file::Sink, verbose: bool) -> io::Result<()> {
@@ -181,8 +179,11 @@ mod tests {
     }
 
     #[test]
-    fn default_threads_caps_directory_workers() {
-        assert!((1..=8).contains(&default_threads(true)));
+    fn default_threads_uses_available_parallelism_for_a_directory() {
+        assert_eq!(
+            default_threads(true),
+            std::thread::available_parallelism().map_or(1, usize::from)
+        );
     }
 
     #[test]

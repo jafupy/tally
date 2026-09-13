@@ -6,6 +6,7 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 argue = { git = "https://github.com/jafupy/argue" }
+crossbeam-channel = "0.5"
 ignore = "0.4"
 memchr = "2"
 regex = { version = "1", default-features = false, features = ["perf", "std"] }
