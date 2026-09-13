@@ -17,6 +17,7 @@ const FAST_START_PULLERS: usize = 3;
 const CALIBRATION_INTERVAL: Duration = Duration::from_millis(400);
 const MIN_SCALING_EFFICIENCY: f64 = 0.97;
 const FILES_PER_JOB: usize = 128;
+const MAX_PREWALK_PATHS: usize = 2048;
 
 enum Job {
     Directory(std::path::PathBuf),
@@ -61,16 +62,20 @@ pub(super) fn scan(
     };
     let mut frontier = VecDeque::from([root.to_path_buf()]);
     let mut file_jobs = VecDeque::new();
+    let mut queued_paths = 1;
     let target_shards = max_pullers.saturating_mul(SHARDS_PER_PULLER);
     let max_expansions = max_pullers.saturating_mul(EXPANSIONS_PER_PULLER);
 
-    for _ in 0..max_expansions {
+    'expand: for _ in 0..max_expansions {
         if frontier.len() >= target_shards {
             break;
         }
         let Some(dir) = frontier.pop_front() else {
             break;
         };
+        queued_paths -= 1;
+        let frontier_start = frontier.len();
+        let file_jobs_start = file_jobs.len();
         let mut builder = walk_builder(&dir, ignore_git);
         if dir != root {
             builder.parents(true);
@@ -84,12 +89,14 @@ pub(super) fn scan(
                         && entry.file_type().is_some_and(|kind| kind.is_dir()) =>
                 {
                     frontier.push_back(entry.into_path());
+                    queued_paths += 1;
                 }
                 Ok(entry)
                     if entry.path() != dir
                         && entry.file_type().is_some_and(|kind| kind.is_file()) =>
                 {
                     files.push(entry.into_path());
+                    queued_paths += 1;
                     if files.len() == FILES_PER_JOB {
                         file_jobs.push_back(Job::Files(std::mem::take(&mut files)));
                     }
@@ -97,6 +104,14 @@ pub(super) fn scan(
                 other => {
                     scanner.visit(other);
                 }
+            }
+            if queued_paths > MAX_PREWALK_PATHS {
+                // A wide directory is cheaper to walk again than to retain
+                // every path before the pullers have started.
+                frontier.truncate(frontier_start);
+                file_jobs.truncate(file_jobs_start);
+                frontier.push_back(dir);
+                break 'expand;
             }
         }
         if !files.is_empty() {
