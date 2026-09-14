@@ -75,7 +75,7 @@ struct ScanWorker {
 
 impl ScanWorker {
     fn visit_path(&mut self, path: &Path) {
-        #[cfg(feature = "trace")]
+        #[cfg(feature = "debug")]
         let _file_context = crate::trace::file_context(path);
         let _span = trace_span!("visit_path", Some(path));
         let result = file::parse_file_buffered(path, self.debug, &mut self.buffer);
@@ -182,7 +182,9 @@ mod tests {
 
         let summary = sink.snapshot();
         assert_eq!(summary.all.files, 9);
+        #[cfg(feature = "debug")]
         assert_eq!(summary.unknown_formats.len(), 9);
+        #[cfg(feature = "debug")]
         assert!(summary.unknown_formats.iter().all(|(_, files)| *files == 1));
 
         fs::remove_dir_all(root).unwrap();

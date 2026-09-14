@@ -92,12 +92,15 @@ fn changed_files(
     )?;
     let mut fields = out.split(|b| *b == 0).filter(|p| !p.is_empty());
     let mut files = Vec::new();
+    #[cfg(feature = "debug")]
     let trace_output = crate::trace_output::TraceOutput::current()?;
     while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
         let path = git_path(path);
-        if !trace_output.matches_file(&root.join(&path))
-            && crate::file_is_included(overrides, &path)
-        {
+        #[cfg(feature = "debug")]
+        if trace_output.matches_file(&root.join(&path)) {
+            continue;
+        }
+        if crate::file_is_included(overrides, &path) {
             files.push(ChangedFile {
                 path,
                 status: status[0],
