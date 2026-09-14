@@ -1,11 +1,17 @@
 use crate::{file, language, output};
 use ignore::overrides::Override;
+use imara_diff::{Algorithm, Diff, InternedInput};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     io::{self, IsTerminal, Write},
-    path::{Path, PathBuf},
-    process::Command,
+    path::Path,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    thread,
+    time::Duration,
 };
 
 #[derive(Clone, Copy, Default, serde::Serialize)]
@@ -13,43 +19,38 @@ struct Changes {
     added: file::Stats,
     deleted: file::Stats,
 }
-struct ChangedFile {
-    path: PathBuf,
-    status: u8,
-}
 
-pub fn count(root: &Path, reference: &str, overrides: &Override, json: bool) -> io::Result<()> {
+type FileCounts = [Option<(&'static str, file::Stats)>; 2];
+
+pub fn count(
+    root: &Path,
+    reference: &str,
+    target: Option<&str>,
+    overrides: &Override,
+    json: bool,
+    threads: usize,
+    adaptive_threads: bool,
+) -> io::Result<()> {
     if !root.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "--diff requires a directory",
         ));
     }
-    let prefix = repo_prefix(root)?;
+    let trace_output = crate::trace_output::TraceOutput::current()?;
+    let repo = tally_git::Repository::open(root)?;
+    let files = repo.files(reference, target, |path| {
+        !trace_output.matches_file(&root.join(path)) && crate::file_is_included(overrides, path)
+    })?;
+    let changes = count_files(root, &repo, files, threads, adaptive_threads)?;
     let mut languages = HashMap::<&'static str, Changes>::new();
-    for changed in changed_files(root, reference, overrides)? {
-        let (deleted_lines, added_lines) = line_numbers(&patch(root, reference, &changed.path)?)?;
-        let repo_path = prefix.join(&changed.path);
-        let old_regular =
-            changed.status != b'A' && revision_is_regular(root, reference, &changed.path)?;
-        let new_regular = changed.status != b'D'
-            && fs::symlink_metadata(root.join(&changed.path))
-                .is_ok_and(|meta| meta.file_type().is_file());
-        if !old_regular && !new_regular {
-            continue;
+    for [added, deleted] in changes {
+        if let Some((name, stats)) = added {
+            languages.entry(name).or_default().added += stats;
         }
-        let old = if !old_regular {
-            Vec::new()
-        } else {
-            revision_file(root, reference, &repo_path)?
-        };
-        let new = if !new_regular {
-            Vec::new()
-        } else {
-            fs::read(root.join(&changed.path))?
-        };
-        add_selected(&mut languages, &changed.path, &new, &added_lines, true);
-        add_selected(&mut languages, &changed.path, &old, &deleted_lines, false);
+        if let Some((name, stats)) = deleted {
+            languages.entry(name).or_default().deleted += stats;
+        }
     }
     let mut rows = languages
         .into_iter()
@@ -72,178 +73,140 @@ pub fn count(root: &Path, reference: &str, overrides: &Override, json: bool) -> 
     }
 }
 
-fn changed_files(
+fn count_files(
     root: &Path,
-    reference: &str,
-    overrides: &Override,
-) -> io::Result<Vec<ChangedFile>> {
-    let out = git(
-        root,
-        &[
-            "diff",
-            "--name-status",
-            "-z",
-            "--no-renames",
-            "--relative",
-            "--end-of-options",
-            reference,
-            "--",
-        ],
-    )?;
-    let mut fields = out.split(|b| *b == 0).filter(|p| !p.is_empty());
-    let mut files = Vec::new();
-    let trace_output = crate::trace_output::TraceOutput::current()?;
-    while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
-        let path = git_path(path);
-        if !trace_output.matches_file(&root.join(&path))
-            && crate::file_is_included(overrides, &path)
-        {
-            files.push(ChangedFile {
-                path,
-                status: status[0],
-            });
-        }
-    }
-    Ok(files)
-}
-fn patch(root: &Path, reference: &str, path: &Path) -> io::Result<Vec<u8>> {
-    output(
-        Command::new("git")
-            .arg("--literal-pathspecs")
-            .args([
-                "diff",
-                "--no-color",
-                "--no-ext-diff",
-                "--unified=0",
-                "--no-renames",
-                "--end-of-options",
-                reference,
-                "--",
-            ])
-            .arg(path)
-            .current_dir(root),
-    )
-}
-fn line_numbers(patch: &[u8]) -> io::Result<(HashSet<usize>, HashSet<usize>)> {
-    let (mut old, mut new, mut dels, mut adds, mut hunk) =
-        (0, 0, HashSet::new(), HashSet::new(), false);
-    for line in patch.split(|b| *b == b'\n') {
-        if line.starts_with(b"@@ ") {
-            let s = std::str::from_utf8(line).map_err(io::Error::other)?;
-            let mut r = s.split_ascii_whitespace().skip(1);
-            old = start(r.next(), '-')?;
-            new = start(r.next(), '+')?;
-            hunk = true;
-        } else if hunk {
-            match line.first() {
-                Some(b'-') => {
-                    dels.insert(old);
-                    old += 1
-                }
-                Some(b'+') => {
-                    adds.insert(new);
-                    new += 1
-                }
-                Some(b' ') => {
-                    old += 1;
-                    new += 1
-                }
-                Some(b'\\') | None => {}
-                _ => hunk = false,
+    repo: &tally_git::Repository,
+    files: Vec<tally_git::FilePair>,
+    threads: usize,
+    adaptive_threads: bool,
+) -> io::Result<Vec<FileCounts>> {
+    let max_workers = threads.max(1).min(files.len().max(1));
+    if max_workers == 1 {
+        let mut counts = Vec::new();
+        for file in files {
+            if let Some(counted) = count_file(repo, file)? {
+                counts.push(counted);
             }
         }
+        return Ok(counts);
     }
-    Ok((dels, adds))
+    let pending = AtomicUsize::new(files.len());
+    let failed = AtomicBool::new(false);
+    let queue = Mutex::new(VecDeque::from(files));
+    thread::scope(|scope| {
+        let mut handles = Vec::with_capacity(max_workers);
+        let spawn_worker = || {
+            let queue = &queue;
+            let pending = &pending;
+            let failed = &failed;
+            scope.spawn(move || -> io::Result<Vec<FileCounts>> {
+                let repo = tally_git::Repository::open(root).map_err(|error| {
+                    failed.store(true, Ordering::Release);
+                    error
+                })?;
+                let mut counts = Vec::new();
+                while !failed.load(Ordering::Relaxed) {
+                    let job = queue.lock().unwrap().pop_front();
+                    let Some(file) = job else { break };
+                    match count_file(&repo, file) {
+                        Ok(Some(counted)) => counts.push(counted),
+                        Ok(None) => {}
+                        Err(error) => {
+                            failed.store(true, Ordering::Release);
+                            return Err(error);
+                        }
+                    }
+                    pending.fetch_sub(1, Ordering::AcqRel);
+                }
+                Ok(counts)
+            })
+        };
+        handles.push(spawn_worker());
+        if !adaptive_threads {
+            while handles.len() < max_workers {
+                handles.push(spawn_worker());
+            }
+        }
+        while pending.load(Ordering::Acquire) > 0 && !failed.load(Ordering::Acquire) {
+            let queued = queue.lock().unwrap().len();
+            if handles.len() < max_workers && queued > handles.len() {
+                handles.push(spawn_worker());
+            }
+            thread::park_timeout(Duration::from_micros(100));
+        }
+        let mut counts = Vec::new();
+        let mut error = None;
+        for handle in handles {
+            match handle.join().unwrap() {
+                Ok(worker_counts) => counts.extend(worker_counts),
+                Err(worker_error) => error = Some(worker_error),
+            }
+        }
+        error.map_or(Ok(counts), Err)
+    })
 }
-fn start(range: Option<&str>, prefix: char) -> io::Result<usize> {
-    range
-        .and_then(|r| r.strip_prefix(prefix))
-        .and_then(|r| r.split(',').next())
-        .and_then(|n| n.parse().ok())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid git diff hunk"))
+
+fn count_file(
+    repo: &tally_git::Repository,
+    file: tally_git::FilePair,
+) -> io::Result<Option<FileCounts>> {
+    if file.working_tree.is_none() && file.old == file.new {
+        return Ok(None);
+    }
+    let old = file.old.map(|id| repo.blob(id)).transpose()?;
+    let new = file.new.map(|id| repo.blob(id)).transpose()?;
+    let working = if let Some(path) = file.working_tree.as_ref() {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_file() => Some(fs::read(path)?),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let old_bytes = old.as_ref().map(|blob| blob.content()).unwrap_or_default();
+    let new_bytes = new
+        .as_ref()
+        .map(|blob| blob.content())
+        .or(working.as_deref())
+        .unwrap_or_default();
+    if old_bytes == new_bytes || is_binary(old_bytes) || is_binary(new_bytes) {
+        return Ok(None);
+    }
+    let input = InternedInput::new(old_bytes, new_bytes);
+    let diff = Diff::compute(Algorithm::Myers, &input);
+    let (mut deleted_lines, mut added_lines) = (HashSet::new(), HashSet::new());
+    for hunk in diff.hunks() {
+        deleted_lines.extend(hunk.before.map(|line| line as usize + 1));
+        added_lines.extend(hunk.after.map(|line| line as usize + 1));
+    }
+    if deleted_lines.is_empty() && added_lines.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some([
+        selected_stats(&file.path, new_bytes, &added_lines),
+        selected_stats(&file.path, old_bytes, &deleted_lines),
+    ]))
 }
-fn add_selected(
-    languages: &mut HashMap<&'static str, Changes>,
+
+fn is_binary(bytes: &[u8]) -> bool {
+    bytes.iter().take(8000).any(|byte| *byte == 0)
+}
+
+fn selected_stats(
     path: &Path,
     contents: &[u8],
     lines: &HashSet<usize>,
-    added: bool,
-) {
+) -> Option<(&'static str, file::Stats)> {
     if lines.is_empty() {
-        return;
+        return None;
     }
     let Some((language_id, mut stats)) = file::count_selected_contents(path, contents, lines)
     else {
-        return;
+        return None;
     };
     stats.files = 1;
     let name = language_id.map_or("Unknown", |id| language::get(id).name);
-    let changes = languages.entry(name).or_default();
-    if added {
-        changes.added += stats;
-    } else {
-        changes.deleted += stats;
-    }
-}
-fn repo_prefix(root: &Path) -> io::Result<PathBuf> {
-    let mut out = git(root, &["rev-parse", "--show-prefix"])?;
-    if out.last() == Some(&b'\n') {
-        out.pop();
-    }
-    Ok(git_path(&out))
-}
-fn revision_is_regular(root: &Path, reference: &str, path: &Path) -> io::Result<bool> {
-    let out = output(
-        Command::new("git")
-            .arg("--literal-pathspecs")
-            .args(["ls-tree", "-z", "--end-of-options", reference, "--"])
-            .arg(path)
-            .current_dir(root),
-    )?;
-    Ok(out.starts_with(b"100"))
-}
-fn revision_file(root: &Path, reference: &str, path: &Path) -> io::Result<Vec<u8>> {
-    let spec = revision_spec(reference, path);
-    output(
-        Command::new("git")
-            .args(["show", "--no-ext-diff", "--end-of-options"])
-            .arg(spec)
-            .current_dir(root),
-    )
-}
-#[cfg(unix)]
-fn revision_spec(reference: &str, path: &Path) -> std::ffi::OsString {
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
-    let mut bytes = reference.as_bytes().to_vec();
-    bytes.push(b':');
-    bytes.extend_from_slice(path.as_os_str().as_bytes());
-    std::ffi::OsString::from_vec(bytes)
-}
-#[cfg(not(unix))]
-fn revision_spec(reference: &str, path: &Path) -> std::ffi::OsString {
-    format!("{reference}:{}", path.to_string_lossy()).into()
-}
-#[cfg(unix)]
-fn git_path(bytes: &[u8]) -> PathBuf {
-    use std::os::unix::ffi::OsStringExt;
-    PathBuf::from(std::ffi::OsString::from_vec(bytes.to_vec()))
-}
-#[cfg(not(unix))]
-fn git_path(bytes: &[u8]) -> PathBuf {
-    PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
-}
-fn git(root: &Path, args: &[&str]) -> io::Result<Vec<u8>> {
-    output(Command::new("git").args(args).current_dir(root))
-}
-fn output(command: &mut Command) -> io::Result<Vec<u8>> {
-    let o = command.output()?;
-    if o.status.success() {
-        Ok(o.stdout)
-    } else {
-        Err(io::Error::other(
-            String::from_utf8_lossy(&o.stderr).trim().to_owned(),
-        ))
-    }
+    Some((name, stats))
 }
 
 fn print_json(rows: &[(&str, Changes)], total: Changes) -> io::Result<()> {

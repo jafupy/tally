@@ -57,7 +57,7 @@ use std::{
 #[argue::parser(
     name = "tally",
     about = "Count and inspect a codebase",
-    long_about = "Diff usage: tally [path] --diff [revision]\nThe path defaults to . and the revision to HEAD. Put an explicit path before --diff."
+    long_about = "Diff usage: tally [path] --diff [revision] [--diff revision]\nOne revision compares with the working tree; two revisions compare with each other. The path defaults to . and the first revision to HEAD. Put an explicit path before --diff."
 )]
 #[derive(Debug)]
 struct Args {
@@ -81,9 +81,9 @@ struct Args {
     #[flag(long = "json")]
     json: bool,
 
-    /// Compare the working tree against an optional git revision (default: HEAD).
+    /// Compare a git revision with the working tree, or repeat to compare two revisions.
     #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
-    diff: Option<String>,
+    diff: Vec<String>,
 
     /// Count only files known to git.
     #[flag(long = "tracked")]
@@ -201,8 +201,22 @@ fn run_inner() -> io::Result<()> {
             .unwrap_or_else(|| Path::new("."))
     };
     let overrides = build_overrides(override_root, &args.include, &args.exclude)?;
-    if let Some(reference) = &args.diff {
-        return diff::count(&args.path, reference, &overrides, args.json);
+    if let Some(reference) = args.diff.first() {
+        if args.diff.len() > 2 {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "--diff may be specified at most twice",
+            ));
+        }
+        return diff::count(
+            &args.path,
+            reference,
+            args.diff.get(1).map(String::as_str),
+            &overrides,
+            args.json,
+            threads,
+            adaptive_threads,
+        );
     }
     let sink = file::Sink::new();
     let progress = std::io::stderr().is_terminal().then(|| {
@@ -281,21 +295,7 @@ fn build_overrides(root: &Path, includes: &[String], excludes: &[String]) -> io:
 }
 
 fn git_files(root: &Path) -> io::Result<Vec<PathBuf>> {
-    let mut command = std::process::Command::new("git");
-    command.current_dir(root);
-    command.args(["ls-files", "-z", "--cached", "--deduplicate"]);
-    let output = command.output()?;
-    if !output.status.success() {
-        return Err(io::Error::other(
-            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        ));
-    }
-    Ok(output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|path| !path.is_empty())
-        .map(|path| root.join(git_path(path)))
-        .collect())
+    tally_git::tracked_files(root)
 }
 
 fn parse_file_list(
@@ -333,19 +333,9 @@ fn file_is_included(overrides: &Override, relative_path: &Path) -> bool {
         })
 }
 
-#[cfg(unix)]
-fn git_path(bytes: &[u8]) -> PathBuf {
-    use std::os::unix::ffi::OsStringExt;
-    PathBuf::from(std::ffi::OsString::from_vec(bytes.to_vec()))
-}
-
-#[cfg(not(unix))]
-fn git_path(bytes: &[u8]) -> PathBuf {
-    PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
-}
-
 fn count_stdin(args: &Args) -> io::Result<()> {
-    if args.tracked || args.diff.is_some() || !args.include.is_empty() || !args.exclude.is_empty() {
+    if args.tracked || !args.diff.is_empty() || !args.include.is_empty() || !args.exclude.is_empty()
+    {
         return Err(io::Error::new(
             ErrorKind::InvalidInput,
             "git and path filters cannot be used with stdin",
@@ -485,7 +475,7 @@ mod tests {
         assert!(!args.json);
         assert!(!args.version);
         assert!(!args.tracked);
-        assert_eq!(args.diff, None);
+        assert!(args.diff.is_empty());
         assert!(args.include.is_empty());
         assert!(args.exclude.is_empty());
         assert_eq!(args.threads, None);

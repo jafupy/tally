@@ -33,11 +33,14 @@ tally . --diff          # compare the working tree against HEAD
 tally src --diff main   # compare src against main
 tally --diff            # default path . and revision HEAD
 tally --diff HEAD~1     # default path . with an explicit revision
+tally --diff v1.2 --diff v1.3  # compare two revisions
+tally . --diff v1.3 -j 4       # use four diff workers
 ```
 
-Diff syntax is `tally [path] --diff [revision]`. Put an explicit path before
-`--diff`; the revision is optional and defaults to `HEAD`. Without `--diff`,
-Tally counts lines as usual.
+Diff syntax is `tally [path] --diff [revision] [--diff revision]`. One revision
+compares against the working tree; two compare against each other, in the order
+given. Put an explicit path before `--diff`; the first revision is optional and
+defaults to `HEAD`. Without `--diff`, Tally counts lines as usual.
 
 Use `tally -` to count text read from standard input.
 
