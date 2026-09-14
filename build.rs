@@ -66,6 +66,10 @@ struct Disambiguation {
 }
 
 fn main() {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        // libgit2 links these frameworks even when its HTTPS feature is disabled.
+        println!("cargo:rustc-link-arg-bin=tally=-Wl,-dead_strip_dylibs");
+    }
     println!("cargo:rerun-if-changed=data/languages");
     println!("cargo:rerun-if-changed=data/files.toml");
 
