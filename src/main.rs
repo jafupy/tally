@@ -81,7 +81,9 @@ struct Args {
     #[flag(long = "json")]
     json: bool,
 
-    /// Add per-file Blank, Comment, and Code columns: min, max, mean, median, sd, iqr, variance, or p0..p100. Bare -x selects min,max,median,sd.
+    /// Add per-file Blank, Comment, and Code columns.
+    /// Use min, max, mean, median, sd, iqr, variance, p0..p100, or NAME=EXPR.
+    /// Bare -x selects min, max, median, and sd.
     #[option(
         short = 'x',
         long = "extended",

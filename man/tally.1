@@ -100,8 +100,21 @@ long form values use
 .BR \-\-extended=median .
 Percentiles use linear interpolation between adjacent ordered values.
 IQR is p75 minus p25. Variance is the population variance, and SD its square
-root. Empty groups show dashes in tables
-and nulls in JSON. This option is unavailable with
+root.
+Custom formulas use NAME=EXPR; quote the option in a shell, for example
+.BR "\-x='avg=sum()/count()'" .
+The expression operates on the per-file values of each of Blank, Comment,
+and Code separately. Functions are p(N) or percentile(N), sum(), count(),
+sumsq(CENTER), and sqrt(EXPR). The CENTER argument defaults to zero;
+sumsq(CENTER) sums squared differences from that center.
+Arithmetic supports +, \-, *, /, ^, and parentheses.
+For example, med=p(50) recreates median and
+var=sumsq(sum()/count())/count() recreates population variance.
+The same primitives can recreate min, max, IQR, and SD.
+Formula names must start with a letter or underscore and contain only letters,
+digits, or underscores. Names must be unique among selected statistics.
+Empty groups and undefined calculations, such as division by zero, show dashes
+in tables and nulls in JSON. This option is unavailable with
 .BR \-\-diff .
 .TP
 .BR \-\-tracked
@@ -237,6 +250,7 @@ tally src \-\-diff main
 tally \-\-diff
 tally \-\-diff HEAD~1
 tally src \-\-json \-\-diff main > changes.json
+tally \-x='med=p(50)' \-x='avg=sum()/count()' .
 cat script.py | tally \-\- \-
 .fi
 .PP

@@ -35,10 +35,10 @@ pub fn calculate_all(
     }
     kinds
         .iter()
-        .map(|&kind| {
+        .map(|kind| {
             let [blanks, comments, code] = columns.each_ref().map(|values| measure(values, kind));
             (
-                kind,
+                kind.clone(),
                 Values {
                     blanks,
                     comments,
@@ -49,7 +49,7 @@ pub fn calculate_all(
         .collect()
 }
 
-fn measure(sorted: &[u64], kind: Kind) -> Option<f64> {
+fn measure(sorted: &[u64], kind: &Kind) -> Option<f64> {
     if sorted.is_empty() {
         return None;
     }
@@ -57,12 +57,13 @@ fn measure(sorted: &[u64], kind: Kind) -> Option<f64> {
     Some(match kind {
         Kind::Min => sorted[0] as f64,
         Kind::Max => sorted[n - 1] as f64,
-        Kind::Median => percentile(sorted, 50),
+        Kind::Median => percentile(sorted, 50.0),
         Kind::Mean => sorted.iter().map(|&v| v as f64).sum::<f64>() / n as f64,
-        Kind::Percentile(p) => percentile(sorted, p),
-        Kind::Iqr => percentile(sorted, 75) - percentile(sorted, 25),
+        Kind::Percentile(p) => percentile(sorted, f64::from(*p)),
+        Kind::Iqr => percentile(sorted, 75.0) - percentile(sorted, 25.0),
         Kind::Variance => population_variance(sorted),
         Kind::Sd => population_variance(sorted).sqrt(),
+        Kind::Formula(formula) => return formula.evaluate(sorted),
     })
 }
 
@@ -75,8 +76,8 @@ fn population_variance(values: &[u64]) -> f64 {
         / values.len() as f64
 }
 
-fn percentile(sorted: &[u64], p: u8) -> f64 {
-    let rank = (sorted.len() - 1) as f64 * f64::from(p) / 100.0;
+pub(crate) fn percentile(sorted: &[u64], p: f64) -> f64 {
+    let rank = (sorted.len() - 1) as f64 * p / 100.0;
     let lower = rank.floor() as usize;
     let upper = rank.ceil() as usize;
     let fraction = rank - lower as f64;

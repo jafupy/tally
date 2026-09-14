@@ -36,7 +36,7 @@ fn table_row<'a>(
     let values = calculate_extended(summary, language, kinds);
     let mut extra = Vec::with_capacity(kinds.len() * 3);
     for metric in 0..3 {
-        for &(kind, value) in &values {
+        for (kind, value) in &values {
             let value = match metric {
                 0 => value.blanks,
                 1 => value.comments,
@@ -128,7 +128,7 @@ fn print_header(
         line.push_str(&format!(" {metric:>width$}"));
         append_extended(
             &mut line,
-            kinds.iter().copied().map(Kind::label),
+            kinds.iter().map(Kind::label),
             &widths.extra[group * kinds.len()..(group + 1) * kinds.len()],
             color,
             "\x1b[1;36m",

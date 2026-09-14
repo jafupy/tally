@@ -22,6 +22,20 @@ Select individual statistics with `-x=median`, `-x=sd`, `-x=iqr`,
 `-x=variance`, or a percentile such as `-x=p95`. Repeat `-x=...` to combine
 them. Percentiles use linear interpolation; IQR is p75 minus p25. Standard
 deviation and variance use the full population of counted files.
+
+Custom formulas use `-x='NAME=EXPR'` and add a column for each of Blank,
+Comment, and Code. The expression runs on that metric's per-file values. For
+example, `-x='med=p(50)'` recreates median and
+`-x='avg=sum()/count()'` recreates mean. Available functions are `p(N)`
+(percentile), `sum()`, `count()`, `sumsq(CENTER)` (sum of squared distances
+from CENTER, which defaults to 0), and `sqrt(EXPR)`. Arithmetic supports
+`+`, `-`, `*`, `/`, `^`, and parentheses. For example,
+`-x='var=sumsq(sum()/count())/count()'` recreates population variance.
+Similarly, `p(0)` and `p(100)` recreate min and max; `p(75)-p(25)` recreates
+IQR; and `sqrt(sumsq(sum()/count())/count())` recreates SD.
+Formula names must be unique; division by zero and other undefined results
+appear as `-` in tables and `null` in JSON.
+
 Use `tally --debug .` to print scan timing, CPU usage, worker and queue activity,
 and unknown file formats to stderr. It can be combined with `--json`.
 

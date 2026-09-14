@@ -1,3 +1,4 @@
+use crate::formula::Formula;
 use std::fmt;
 
 #[derive(Debug)]
@@ -11,7 +12,7 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
     Min,
     Max,
@@ -21,10 +22,11 @@ pub enum Kind {
     Iqr,
     Variance,
     Percentile(u8),
+    Formula(Formula),
 }
 
 impl Kind {
-    pub fn name(self) -> String {
+    pub fn name(&self) -> String {
         match self {
             Self::Min => "min".into(),
             Self::Max => "max".into(),
@@ -34,10 +36,11 @@ impl Kind {
             Self::Iqr => "iqr".into(),
             Self::Variance => "variance".into(),
             Self::Percentile(n) => format!("p{n}"),
+            Self::Formula(formula) => formula.name.clone(),
         }
     }
 
-    pub fn label(self) -> String {
+    pub fn label(&self) -> String {
         match self {
             Self::Min => "Min".into(),
             Self::Max => "Max".into(),
@@ -47,6 +50,7 @@ impl Kind {
             Self::Iqr => "IQR".into(),
             Self::Variance => "Variance".into(),
             Self::Percentile(n) => format!("P{n}"),
+            Self::Formula(formula) => formula.name.clone(),
         }
     }
 }
@@ -64,26 +68,40 @@ pub fn parse(args: &[String]) -> Result<Vec<Kind>, ParseError> {
             "iqr" => vec![Kind::Iqr],
             "variance" => vec![Kind::Variance],
             value => {
-                let percentile = value
-                    .strip_prefix('p')
-                    .and_then(|digits| {
-                        (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
-                            .then_some(digits)
-                    })
-                    .and_then(|digits| digits.parse::<u8>().ok())
-                    .filter(|&n| n <= 100);
-                match percentile {
-                    Some(n) => vec![Kind::Percentile(n)],
-                    None => {
-                        return Err(ParseError(format!(
-                            "invalid extended statistic '{value}'; use min, max, mean, median, sd, iqr, variance, or p0..p100"
-                        )));
+                if value.contains('=') {
+                    vec![Kind::Formula(Formula::parse(value).map_err(ParseError)?)]
+                } else {
+                    let percentile = value
+                        .strip_prefix('p')
+                        .and_then(|digits| {
+                            (!digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+                                .then_some(digits)
+                        })
+                        .and_then(|digits| digits.parse::<u8>().ok())
+                        .filter(|&n| n <= 100);
+                    match percentile {
+                        Some(n) => vec![Kind::Percentile(n)],
+                        None => {
+                            return Err(ParseError(format!(
+                                "invalid extended statistic '{value}'; use min, max, mean, median, sd, iqr, variance, p0..p100, or NAME=EXPR"
+                            )));
+                        }
                     }
                 }
             }
         };
         for kind in kinds {
-            if !result.contains(&kind) {
+            if let Some(existing) = result
+                .iter()
+                .find(|existing: &&Kind| existing.name() == kind.name())
+            {
+                if existing != &kind {
+                    return Err(ParseError(format!(
+                        "duplicate extended statistic name '{}'",
+                        kind.name()
+                    )));
+                }
+            } else {
                 result.push(kind);
             }
         }
