@@ -1,8 +1,8 @@
-use super::summary_rows;
-use crate::extended::{self, Kind, Values};
+use super::{calculate_extended, summary_rows};
 use crate::file::{Stats, Summary};
 use std::collections::BTreeMap;
 use std::io::{self, Write};
+use tally_stats::{Kind, Values};
 
 #[derive(serde::Serialize)]
 struct JsonSummary {
@@ -63,7 +63,7 @@ fn with_extended(
     let mut json: JsonStats = stats.into();
     if !kinds.is_empty() {
         json.extended = Some(
-            extended::calculate_all(summary, language, kinds)
+            calculate_extended(summary, language, kinds)
                 .into_iter()
                 .map(|(kind, values)| (kind.name(), values))
                 .collect(),

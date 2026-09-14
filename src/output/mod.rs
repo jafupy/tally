@@ -2,11 +2,32 @@ mod json;
 mod table;
 
 use crate::file::{Stats, Summary};
+use tally_stats::{Kind, Sample, Values};
 
 pub use json::print_json;
 pub use table::{format_number, print_summary, print_unknown_formats};
 
 pub(crate) const DIM_STYLE: &str = "\x1b[2m";
+
+fn calculate_extended(
+    summary: &Summary,
+    language: Option<&str>,
+    kinds: &[Kind],
+) -> Vec<(Kind, Values)> {
+    tally_stats::calculate_all(
+        summary.samples.iter().filter_map(|&(id, stats)| {
+            let sample_language = id
+                .map(|id| crate::language::get(id).name)
+                .unwrap_or("Unknown");
+            (language.is_none() || language == Some(sample_language)).then_some(Sample {
+                blanks: stats.blanks,
+                comments: stats.comments,
+                code: stats.code,
+            })
+        }),
+        kinds,
+    )
+}
 
 fn summary_rows(summary: &Summary) -> Vec<(&'static str, Stats)> {
     let mut rows = summary

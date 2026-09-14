@@ -1,7 +1,7 @@
-use super::summary_rows;
-use crate::extended::{self, Kind};
+use super::{calculate_extended, summary_rows};
 use crate::file::{Stats, Summary};
 use std::io::{self, Write};
+use tally_stats::Kind;
 
 pub fn print_summary(summary: &Summary, color: bool, kinds: &[Kind]) -> io::Result<()> {
     let mut output = io::stdout().lock();
@@ -33,7 +33,7 @@ fn table_row<'a>(
     language: Option<&str>,
     kinds: &[Kind],
 ) -> TableRow<'a> {
-    let values = extended::calculate_all(summary, language, kinds);
+    let values = calculate_extended(summary, language, kinds);
     let mut extra = Vec::with_capacity(kinds.len() * 3);
     for metric in 0..3 {
         for &(kind, value) in &values {

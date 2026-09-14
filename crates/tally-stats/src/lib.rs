@@ -1,5 +1,15 @@
-use crate::file::Summary;
-use std::io::{self, ErrorKind};
+use std::fmt;
+
+#[derive(Debug)]
+pub struct ParseError(String);
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl std::error::Error for ParseError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -35,7 +45,7 @@ impl Kind {
     }
 }
 
-pub fn parse(args: &[String]) -> io::Result<Vec<Kind>> {
+pub fn parse(args: &[String]) -> Result<Vec<Kind>, ParseError> {
     let mut result = Vec::new();
     for arg in args {
         let kinds = match arg.as_str() {
@@ -57,12 +67,9 @@ pub fn parse(args: &[String]) -> io::Result<Vec<Kind>> {
                 match percentile {
                     Some(n) => vec![Kind::Percentile(n)],
                     None => {
-                        return Err(io::Error::new(
-                            ErrorKind::InvalidInput,
-                            format!(
-                                "invalid extended statistic '{value}'; use min, max, mean, median, sd, or p0..p100"
-                            ),
-                        ));
+                        return Err(ParseError(format!(
+                            "invalid extended statistic '{value}'; use min, max, mean, median, sd, or p0..p100"
+                        )));
                     }
                 }
             }
@@ -83,27 +90,27 @@ pub struct Values {
     pub code: Option<f64>,
 }
 
+#[derive(Clone, Copy)]
+pub struct Sample {
+    pub blanks: u64,
+    pub comments: u64,
+    pub code: u64,
+}
+
 pub fn calculate_all(
-    summary: &Summary,
-    language: Option<&str>,
+    samples: impl IntoIterator<Item = Sample>,
     kinds: &[Kind],
 ) -> Vec<(Kind, Values)> {
     if kinds.is_empty() {
         return Vec::new();
     }
     let mut columns = [Vec::new(), Vec::new(), Vec::new()];
-    for &(id, stats) in &summary.samples {
-        let sample_language = id
-            .map(|id| crate::language::get(id).name)
-            .unwrap_or("Unknown");
-        if language.is_none() || language == Some(sample_language) {
-            for (column, value) in
-                columns
-                    .iter_mut()
-                    .zip([stats.blanks, stats.comments, stats.code])
-            {
-                column.push(value);
-            }
+    for sample in samples {
+        for (column, value) in columns
+            .iter_mut()
+            .zip([sample.blanks, sample.comments, sample.code])
+        {
+            column.push(value);
         }
     }
     for column in &mut columns {

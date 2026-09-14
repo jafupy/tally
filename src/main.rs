@@ -33,7 +33,6 @@ macro_rules! trace_span {
 mod debug;
 mod diff;
 mod dir;
-mod extended;
 mod file;
 mod language;
 mod output;
@@ -152,7 +151,8 @@ fn run() -> io::Result<()> {
 
 fn run_inner() -> io::Result<()> {
     let args = parse_args();
-    let extended = extended::parse(&args.extended)?;
+    let extended = tally_stats::parse(&args.extended)
+        .map_err(|error| io::Error::new(ErrorKind::InvalidInput, error))?;
     if args.version {
         update::check()?;
         return Ok(());
@@ -184,7 +184,7 @@ fn run_inner() -> io::Result<()> {
     );
 
     if args.path == Path::new("-") {
-        return count_stdin(&args);
+        return count_stdin(&args, &extended);
     }
 
     let metadata = {
@@ -362,14 +362,13 @@ fn git_path(bytes: &[u8]) -> PathBuf {
     PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
 }
 
-fn count_stdin(args: &Args) -> io::Result<()> {
+fn count_stdin(args: &Args, extended: &[tally_stats::Kind]) -> io::Result<()> {
     if args.tracked || args.diff.is_some() || !args.include.is_empty() || !args.exclude.is_empty() {
         return Err(io::Error::new(
             ErrorKind::InvalidInput,
             "git and path filters cannot be used with stdin",
         ));
     }
-    let extended = extended::parse(&args.extended)?;
     let sink = file::Sink::new_with_samples(!extended.is_empty());
     let mut batch = Batch::with_samples(!extended.is_empty());
     if let Some(stats) = file::parse_stdin(args.debug != DebugLevel::Off)? {
@@ -378,9 +377,9 @@ fn count_stdin(args: &Args) -> io::Result<()> {
     sink.add_batch(&mut batch);
     let summary = sink.snapshot();
     if args.json {
-        output::print_json(&summary, &extended)
+        output::print_json(&summary, extended)
     } else {
-        output::print_summary(&summary, std::io::stdout().is_terminal(), &extended)
+        output::print_summary(&summary, std::io::stdout().is_terminal(), extended)
     }
 }
 
