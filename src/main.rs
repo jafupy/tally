@@ -33,6 +33,7 @@ macro_rules! trace_span {
 mod debug;
 mod diff;
 mod dir;
+mod extended;
 mod file;
 mod language;
 mod output;
@@ -80,6 +81,16 @@ struct Args {
     /// Output results as JSON.
     #[flag(long = "json")]
     json: bool,
+
+    /// Add per-file Blank, Comment, and Code columns: min, max, mean, median, sd, or p0..p100. Bare -x selects min,max,median,sd.
+    #[option(
+        short = 'x',
+        long = "extended",
+        optional = "default",
+        equals = true,
+        value_name = "STAT"
+    )]
+    extended: Vec<String>,
 
     /// Compare the working tree against an optional git revision (default: HEAD).
     #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
@@ -141,6 +152,7 @@ fn run() -> io::Result<()> {
 
 fn run_inner() -> io::Result<()> {
     let args = parse_args();
+    let extended = extended::parse(&args.extended)?;
     if args.version {
         update::check()?;
         return Ok(());
@@ -202,9 +214,15 @@ fn run_inner() -> io::Result<()> {
     };
     let overrides = build_overrides(override_root, &args.include, &args.exclude)?;
     if let Some(reference) = &args.diff {
+        if !extended.is_empty() {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "-x cannot be used with --diff",
+            ));
+        }
         return diff::count(&args.path, reference, &overrides, args.json);
     }
-    let sink = file::Sink::new();
+    let sink = file::Sink::new_with_samples(!extended.is_empty());
     let progress = std::io::stderr().is_terminal().then(|| {
         let (progress_done, done) = mpsc::channel();
         (progress_done, show_progress(Arc::clone(&sink), done))
@@ -254,9 +272,9 @@ fn run_inner() -> io::Result<()> {
     {
         let _span = trace_span!("output", None);
         if args.json {
-            output::print_json(&summary)?;
+            output::print_json(&summary, &extended)?;
         } else {
-            output::print_summary(&summary, std::io::stdout().is_terminal())?;
+            output::print_summary(&summary, std::io::stdout().is_terminal(), &extended)?;
         }
 
         if let Some(timing) = timing {
@@ -351,17 +369,18 @@ fn count_stdin(args: &Args) -> io::Result<()> {
             "git and path filters cannot be used with stdin",
         ));
     }
-    let sink = file::Sink::new();
-    let mut batch = Batch::default();
+    let extended = extended::parse(&args.extended)?;
+    let sink = file::Sink::new_with_samples(!extended.is_empty());
+    let mut batch = Batch::with_samples(!extended.is_empty());
     if let Some(stats) = file::parse_stdin(args.debug != DebugLevel::Off)? {
         batch.add(stats);
     }
     sink.add_batch(&mut batch);
     let summary = sink.snapshot();
     if args.json {
-        output::print_json(&summary)
+        output::print_json(&summary, &extended)
     } else {
-        output::print_summary(&summary, std::io::stdout().is_terminal())
+        output::print_summary(&summary, std::io::stdout().is_terminal(), &extended)
     }
 }
 
@@ -385,6 +404,12 @@ fn parse_args() -> Args {
     // Join space-separated revisions without touching other option values or `--`.
     let mut position = 1;
     while position < argv.len() {
+        if let Some(value) = argv[position]
+            .to_str()
+            .and_then(|arg| arg.strip_prefix("-x="))
+        {
+            argv[position] = format!("--extended={value}").into();
+        }
         match argv[position].to_str() {
             Some("--") => break,
             Some("-j" | "--threads" | "--include" | "--exclude") => position += 2,
@@ -424,7 +449,7 @@ fn default_threads(path_is_dir: bool) -> usize {
 fn parse_single_file(path: &Path, sink: &file::Sink, debug: bool) -> io::Result<()> {
     #[cfg(feature = "trace")]
     let _file_context = trace::file_context(path);
-    let mut batch = Batch::default();
+    let mut batch = Batch::with_samples(sink.collects_samples());
     if let Some(file_stats) = parse_file(path, debug)? {
         batch.add(file_stats);
     }

@@ -88,6 +88,20 @@ The former \-v/\-\-verbose option is not part of this interface.
 .B \-\-json
 Write structured JSON instead of a table. See OUTPUT.
 .TP
+.B \-x[=stat], \-\-extended[=stat]
+Add per-file statistics as columns beside Blank, Comment, and Code in the
+main table, by language and for all counted files.
+A bare option selects min, max, median, and sd.
+Select one with min, max, mean, median, sd, or pN where N is 0 through 100;
+repeat the option to combine selections. Short form values use
+.BR \-x=median ;
+long form values use
+.BR \-\-extended=median .
+Percentiles use linear interpolation between adjacent ordered values.
+SD is the population standard deviation. Empty groups show dashes in tables
+and nulls in JSON. This option is unavailable with
+.BR \-\-diff .
+.TP
 .BR \-\-tracked
 Count files listed in the Git index, using their current working-tree contents.
 Requires Git and a working-tree repository.
@@ -173,6 +187,9 @@ Normal JSON has a languages array and a total object.
 Each language entry has language, files, lines, blanks, comments, and code;
 total has the same numeric fields without language.
 Counts are integers, without the table's thousands separators.
+With extended statistics, each language and total object also has an extended
+object keyed by the selected statistic. Each value contains blanks, comments,
+and code per file. The table adds the selected statistics beside each metric.
 .PP
 Diff tables use the same columns with +added/\-deleted pairs.
 Equal counts are abbreviated as \(+-N: for example, \(+-3 means three added

@@ -1,5 +1,7 @@
 use super::summary_rows;
+use crate::extended::{self, Kind, Values};
 use crate::file::{Stats, Summary};
+use std::collections::BTreeMap;
 use std::io::{self, Write};
 
 #[derive(serde::Serialize)]
@@ -22,6 +24,8 @@ struct JsonStats {
     comments: u64,
     blanks: u64,
     code: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extended: Option<BTreeMap<String, Values>>,
 }
 
 impl From<Stats> for JsonStats {
@@ -32,28 +36,48 @@ impl From<Stats> for JsonStats {
             comments: stats.comments,
             blanks: stats.blanks,
             code: stats.code,
+            extended: None,
         }
     }
 }
 
-fn json_summary(summary: &Summary) -> JsonSummary {
+fn json_summary(summary: &Summary, kinds: &[Kind]) -> JsonSummary {
     JsonSummary {
         languages: summary_rows(summary)
             .into_iter()
             .map(|(language, stats)| JsonLanguage {
                 language,
-                stats: stats.into(),
+                stats: with_extended(summary, Some(language), stats, kinds),
             })
             .collect(),
-        total: summary.all.into(),
+        total: with_extended(summary, None, summary.all, kinds),
     }
 }
 
-pub fn print_json(summary: &Summary) -> io::Result<()> {
+fn with_extended(
+    summary: &Summary,
+    language: Option<&str>,
+    stats: Stats,
+    kinds: &[Kind],
+) -> JsonStats {
+    let mut json: JsonStats = stats.into();
+    if !kinds.is_empty() {
+        json.extended = Some(
+            extended::calculate_all(summary, language, kinds)
+                .into_iter()
+                .map(|(kind, values)| (kind.name(), values))
+                .collect(),
+        );
+    }
+    json
+}
+
+pub fn print_json(summary: &Summary, kinds: &[Kind]) -> io::Result<()> {
     writeln!(
         io::stdout().lock(),
         "{}",
-        serde_json::to_string_pretty(&json_summary(summary)).expect("summary should serialize")
+        serde_json::to_string_pretty(&json_summary(summary, kinds))
+            .expect("summary should serialize")
     )
 }
 
@@ -75,9 +99,10 @@ mod tests {
             unknown: stats,
             unknown_formats: Vec::new(),
             languages: Vec::new(),
+            samples: Vec::new(),
         };
 
-        let value = serde_json::to_value(json_summary(&summary)).unwrap();
+        let value = serde_json::to_value(json_summary(&summary, &[])).unwrap();
 
         assert_eq!(value["languages"][0]["language"], "Unknown");
         assert_eq!(value["languages"][0]["files"], 1);

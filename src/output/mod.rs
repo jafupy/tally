@@ -42,6 +42,7 @@ mod tests {
                 ..Stats::default()
             },
             unknown_formats: Vec::new(),
+            samples: Vec::new(),
             languages: vec![
                 (
                     crate::language::LanguageId(0),

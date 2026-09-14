@@ -11,6 +11,7 @@ use std::sync::{
 
 pub struct Sink {
     files: AtomicU64,
+    collect_samples: bool,
     inner: Mutex<SinkInner>,
 }
 
@@ -20,17 +21,28 @@ struct SinkInner {
     unknown: Stats,
     per_language: Vec<Stats>,
     unknown_formats: HashMap<String, u64>,
+    samples: Vec<(Option<LanguageId>, Stats)>,
 }
 
 impl Sink {
+    #[cfg(test)]
     pub fn new() -> Arc<Self> {
+        Self::new_with_samples(false)
+    }
+
+    pub fn new_with_samples(collect_samples: bool) -> Arc<Self> {
         Arc::new(Self {
             files: AtomicU64::new(0),
+            collect_samples,
             inner: Mutex::new(SinkInner {
                 per_language: vec![Stats::default(); language::count()],
                 ..SinkInner::default()
             }),
         })
+    }
+
+    pub fn collects_samples(&self) -> bool {
+        self.collect_samples
     }
 
     pub fn record_progress(&self, files: u64) {
@@ -65,6 +77,8 @@ impl Sink {
         for (format, files) in batch.unknown_formats.drain() {
             *sink.unknown_formats.entry(format).or_default() += files;
         }
+
+        sink.samples.append(&mut batch.samples);
 
         batch.clear();
     }
@@ -101,29 +115,40 @@ impl Sink {
             unknown: sink.unknown,
             unknown_formats,
             languages,
+            samples: sink.samples.clone(),
         }
     }
 }
 
 pub struct Batch {
+    collect_samples: bool,
     all: Stats,
     unknown: Stats,
     per_language: Vec<Stats>,
     unknown_formats: HashMap<String, u64>,
+    samples: Vec<(Option<LanguageId>, Stats)>,
 }
 
 impl Default for Batch {
     fn default() -> Self {
         Self {
+            collect_samples: false,
             all: Stats::default(),
             unknown: Stats::default(),
             per_language: vec![Stats::default(); language::count()],
             unknown_formats: HashMap::new(),
+            samples: Vec::new(),
         }
     }
 }
 
 impl Batch {
+    pub fn with_samples(collect: bool) -> Self {
+        let mut batch = Self::default();
+        batch.collect_samples = collect;
+        batch
+    }
+
     pub fn add(&mut self, file_stats: FileStats) {
         #[cfg(feature = "trace")]
         let (lines, known) = match &file_stats {
@@ -137,10 +162,16 @@ impl Batch {
         );
         match file_stats {
             FileStats::Known { language_id, stats } => {
+                if self.collect_samples {
+                    self.samples.push((Some(language_id), stats));
+                }
                 self.all += stats;
                 self.per_language[language_id.0] += stats;
             }
             FileStats::Unknown { format, stats } => {
+                if self.collect_samples {
+                    self.samples.push((None, stats));
+                }
                 self.all += stats;
                 self.unknown += stats;
                 if let Some(format) = format {
@@ -166,6 +197,7 @@ pub struct Summary {
     pub unknown: Stats,
     pub unknown_formats: Vec<(String, u64)>,
     pub languages: Vec<(LanguageId, Stats)>,
+    pub samples: Vec<(Option<LanguageId>, Stats)>,
 }
 
 #[derive(Default, Clone, Copy, serde::Serialize)]
