@@ -92,13 +92,15 @@ Write structured JSON instead of a table. See OUTPUT.
 Add per-file statistics as columns beside Blank, Comment, and Code in the
 main table, by language and for all counted files.
 A bare option selects min, max, median, and sd.
-Select one with min, max, mean, median, sd, or pN where N is 0 through 100;
+Select one with min, max, mean, median, sd, iqr, variance, or pN where N is
+0 through 100;
 repeat the option to combine selections. Short form values use
 .BR \-x=median ;
 long form values use
 .BR \-\-extended=median .
 Percentiles use linear interpolation between adjacent ordered values.
-SD is the population standard deviation. Empty groups show dashes in tables
+IQR is p75 minus p25. Variance is the population variance, and SD its square
+root. Empty groups show dashes in tables
 and nulls in JSON. This option is unavailable with
 .BR \-\-diff .
 .TP

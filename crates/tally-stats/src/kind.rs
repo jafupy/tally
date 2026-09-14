@@ -18,6 +18,8 @@ pub enum Kind {
     Median,
     Mean,
     Sd,
+    Iqr,
+    Variance,
     Percentile(u8),
 }
 
@@ -29,6 +31,8 @@ impl Kind {
             Self::Median => "median".into(),
             Self::Mean => "mean".into(),
             Self::Sd => "sd".into(),
+            Self::Iqr => "iqr".into(),
+            Self::Variance => "variance".into(),
             Self::Percentile(n) => format!("p{n}"),
         }
     }
@@ -40,6 +44,8 @@ impl Kind {
             Self::Median => "Median".into(),
             Self::Mean => "Mean".into(),
             Self::Sd => "SD".into(),
+            Self::Iqr => "IQR".into(),
+            Self::Variance => "Variance".into(),
             Self::Percentile(n) => format!("P{n}"),
         }
     }
@@ -55,6 +61,8 @@ pub fn parse(args: &[String]) -> Result<Vec<Kind>, ParseError> {
             "median" => vec![Kind::Median],
             "mean" => vec![Kind::Mean],
             "sd" => vec![Kind::Sd],
+            "iqr" => vec![Kind::Iqr],
+            "variance" => vec![Kind::Variance],
             value => {
                 let percentile = value
                     .strip_prefix('p')
@@ -68,7 +76,7 @@ pub fn parse(args: &[String]) -> Result<Vec<Kind>, ParseError> {
                     Some(n) => vec![Kind::Percentile(n)],
                     None => {
                         return Err(ParseError(format!(
-                            "invalid extended statistic '{value}'; use min, max, mean, median, sd, or p0..p100"
+                            "invalid extended statistic '{value}'; use min, max, mean, median, sd, iqr, variance, or p0..p100"
                         )));
                     }
                 }

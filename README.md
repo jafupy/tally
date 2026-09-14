@@ -18,9 +18,10 @@ Use `tally --json .` to emit the same results as structured JSON.
 Use `tally -x .` to add per-file minimum, maximum, median, and standard
 deviation columns beside Blank, Comment, and Code for each language and the
 whole scan.
-Select individual statistics with `-x=median`, `-x=sd`, or a percentile such as
-`-x=p95`. Repeat `-x=...` to combine them. Percentiles use linear interpolation;
-standard deviation uses the full population of counted files.
+Select individual statistics with `-x=median`, `-x=sd`, `-x=iqr`,
+`-x=variance`, or a percentile such as `-x=p95`. Repeat `-x=...` to combine
+them. Percentiles use linear interpolation; IQR is p75 minus p25. Standard
+deviation and variance use the full population of counted files.
 Use `tally --debug .` to print scan timing, CPU usage, worker and queue activity,
 and unknown file formats to stderr. It can be combined with `--json`.
 

@@ -60,16 +60,19 @@ fn measure(sorted: &[u64], kind: Kind) -> Option<f64> {
         Kind::Median => percentile(sorted, 50),
         Kind::Mean => sorted.iter().map(|&v| v as f64).sum::<f64>() / n as f64,
         Kind::Percentile(p) => percentile(sorted, p),
-        Kind::Sd => {
-            let mean = sorted.iter().map(|&v| v as f64).sum::<f64>() / n as f64;
-            (sorted
-                .iter()
-                .map(|&v| (v as f64 - mean).powi(2))
-                .sum::<f64>()
-                / n as f64)
-                .sqrt()
-        }
+        Kind::Iqr => percentile(sorted, 75) - percentile(sorted, 25),
+        Kind::Variance => population_variance(sorted),
+        Kind::Sd => population_variance(sorted).sqrt(),
     })
+}
+
+fn population_variance(values: &[u64]) -> f64 {
+    let mean = values.iter().map(|&v| v as f64).sum::<f64>() / values.len() as f64;
+    values
+        .iter()
+        .map(|&v| (v as f64 - mean).powi(2))
+        .sum::<f64>()
+        / values.len() as f64
 }
 
 fn percentile(sorted: &[u64], p: u8) -> f64 {
