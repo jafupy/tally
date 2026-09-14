@@ -1,17 +1,23 @@
 // Prototype: own directory crawler and lock-free MPMC job rings. The ignore
 // crate is used only to parse and match ignore patterns, never to walk.
+#[cfg(feature = "debug")]
 mod metrics;
 mod rules;
 mod workers;
 
 use super::{report_file_error, scan_result};
 use crate::file;
+#[cfg(feature = "debug")]
 use crate::trace_output::TraceOutput;
 use crossbeam_queue::ArrayQueue;
 use ignore::gitignore::Gitignore;
 use ignore::overrides::Override;
+#[cfg(feature = "debug")]
 use metrics::Counters;
+#[cfg(feature = "debug")]
 pub(crate) use metrics::ScanReport;
+#[cfg(not(feature = "debug"))]
+pub(crate) type ScanReport = ();
 use rules::{Rules, extend_rules};
 use std::collections::VecDeque;
 use std::fs;
@@ -33,11 +39,13 @@ struct DirectoryJob {
 
 struct Shared {
     overrides: Override,
+    #[cfg(feature = "debug")]
     trace_output: TraceOutput,
     directories: ArrayQueue<DirectoryJob>,
     files: ArrayQueue<Vec<PathBuf>>,
     pending_directories: AtomicUsize,
     pending_files: AtomicUsize,
+    #[cfg(feature = "debug")]
     metrics: Option<Counters>,
 }
 
@@ -48,18 +56,22 @@ impl Shared {
         if let Err(job) = self.directories.push(job) {
             trace_event!("directory_spill", Some(&job.path), serde_json::json!({}));
             local.push_back(job);
+            #[cfg(feature = "debug")]
             if let Some(metrics) = &self.metrics {
                 metrics.directory_spills.fetch_add(1, Ordering::Relaxed);
             }
-        } else if let Some(metrics) = &self.metrics {
-            metrics
-                .peak_directory_queue
-                .fetch_max(self.directories.len(), Ordering::Relaxed);
+        } else {
+            #[cfg(feature = "debug")]
+            if let Some(metrics) = &self.metrics {
+                metrics
+                    .peak_directory_queue
+                    .fetch_max(self.directories.len(), Ordering::Relaxed);
+            }
         }
     }
 
     fn push_files(&self, paths: Vec<PathBuf>, local: &mut VecDeque<Vec<PathBuf>>) {
-        #[cfg(feature = "trace")]
+        #[cfg(feature = "debug")]
         if crate::trace::enabled() {
             for path in &paths {
                 trace_event!("file_enqueue", Some(path), serde_json::json!({}));
@@ -71,6 +83,7 @@ impl Shared {
             serde_json::json!({"files": paths.len()})
         );
         self.pending_files.fetch_add(paths.len(), Ordering::AcqRel);
+        #[cfg(feature = "debug")]
         if let Some(metrics) = &self.metrics {
             metrics
                 .files_queued
@@ -84,13 +97,17 @@ impl Shared {
                 serde_json::json!({"files": paths.len()})
             );
             local.push_back(paths);
+            #[cfg(feature = "debug")]
             if let Some(metrics) = &self.metrics {
                 metrics.file_spills.fetch_add(1, Ordering::Relaxed);
             }
-        } else if let Some(metrics) = &self.metrics {
-            metrics
-                .peak_file_queue
-                .fetch_max(self.files.len(), Ordering::Relaxed);
+        } else {
+            #[cfg(feature = "debug")]
+            if let Some(metrics) = &self.metrics {
+                metrics
+                    .peak_file_queue
+                    .fetch_max(self.files.len(), Ordering::Relaxed);
+            }
         }
     }
 
@@ -126,6 +143,7 @@ fn list_directory(
             return;
         }
     };
+    #[cfg(feature = "debug")]
     if let Some(metrics) = &shared.metrics {
         metrics.directories_listed.fetch_add(1, Ordering::Relaxed);
     }
@@ -172,6 +190,7 @@ fn list_directory(
             continue;
         }
         let path = entry.path();
+        #[cfg(feature = "debug")]
         if shared.trace_output.matches_entry(&path) {
             trace_event!(
                 "entry_skip",
@@ -265,11 +284,13 @@ pub(super) fn scan(
     };
     let shared = Arc::new(Shared {
         overrides,
+        #[cfg(feature = "debug")]
         trace_output: TraceOutput::current()?,
         directories: ArrayQueue::new(DIR_QUEUE_CAPACITY),
         files: ArrayQueue::new(FILE_QUEUE_CAPACITY),
         pending_directories: AtomicUsize::new(1),
         pending_files: AtomicUsize::new(0),
+        #[cfg(feature = "debug")]
         metrics: debug.then(Counters::new),
     });
     trace_event!("root_queued", Some(&root), serde_json::json!({}));
@@ -315,6 +336,12 @@ pub(super) fn scan(
         )
     };
     scan_result(failed.load(Ordering::Relaxed))?;
+    #[cfg(not(feature = "debug"))]
+    {
+        let _ = workers;
+        Ok(())
+    }
+    #[cfg(feature = "debug")]
     Ok(shared.metrics.as_ref().map_or(
         ScanReport {
             workers,

@@ -1,4 +1,4 @@
-#[cfg(feature = "trace")]
+#[cfg(feature = "debug")]
 #[macro_export]
 macro_rules! trace_event {
     ($name:expr, $path:expr, $detail:expr) => {
@@ -8,13 +8,13 @@ macro_rules! trace_event {
     };
 }
 
-#[cfg(not(feature = "trace"))]
+#[cfg(not(feature = "debug"))]
 #[macro_export]
 macro_rules! trace_event {
     ($($arg:tt)*) => {};
 }
 
-#[cfg(feature = "trace")]
+#[cfg(feature = "debug")]
 #[macro_export]
 macro_rules! trace_span {
     ($name:expr, $path:expr) => {
@@ -22,7 +22,7 @@ macro_rules! trace_span {
     };
 }
 
-#[cfg(not(feature = "trace"))]
+#[cfg(not(feature = "debug"))]
 #[macro_export]
 macro_rules! trace_span {
     ($($arg:tt)*) => {
@@ -30,14 +30,16 @@ macro_rules! trace_span {
     };
 }
 
+#[cfg(feature = "debug")]
 mod debug;
 mod diff;
 mod dir;
 mod file;
 mod language;
 mod output;
-#[cfg(feature = "trace")]
+#[cfg(feature = "debug")]
 mod trace;
+#[cfg(feature = "debug")]
 mod trace_output;
 mod update;
 
@@ -54,6 +56,7 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "debug")]
 #[argue::parser(
     name = "tally",
     about = "Count and inspect a codebase",
@@ -73,8 +76,8 @@ struct Args {
     #[option(short = 'j', long = "threads")]
     threads: Option<usize>,
 
-    /// Print diagnostics; use --debug=max for a full trace.
-    #[option(short = 'd', long = "debug", default = DebugLevel::Off, optional = "summary", equals = true, value_name = "LEVEL")]
+    /// Print scan diagnostics (summary by default); use --debug=max for a full trace.
+    #[option(short = 'd', long = "debug", default = DebugLevel::Off, optional = "summary", equals = true, value_name = "summary|max")]
     debug: DebugLevel,
 
     /// Output results as JSON.
@@ -102,6 +105,52 @@ struct Args {
     path: PathBuf,
 }
 
+#[cfg(not(feature = "debug"))]
+#[argue::parser(
+    name = "tally",
+    about = "Count and inspect a codebase",
+    long_about = "Diff usage: tally [path] --diff [revision]\nThe path defaults to . and the revision to HEAD. Put an explicit path before --diff."
+)]
+#[derive(Debug)]
+struct Args {
+    /// Print the version and check GitHub for updates.
+    #[flag(short = 'V', long = "version")]
+    version: bool,
+
+    /// Include files ignored by gitignore rules.
+    #[flag(short = 'a', long = "all")]
+    all: bool,
+
+    /// Number of worker threads. Defaults to adaptive scaling for directories and 1 for a file.
+    #[option(short = 'j', long = "threads")]
+    threads: Option<usize>,
+
+    /// Output results as JSON.
+    #[flag(long = "json")]
+    json: bool,
+
+    /// Compare the working tree against an optional git revision (default: HEAD).
+    #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
+    diff: Option<String>,
+
+    /// Count only files known to git.
+    #[flag(long = "tracked")]
+    tracked: bool,
+
+    /// Include paths matching this glob. May be repeated.
+    #[option(long = "include")]
+    include: Vec<String>,
+
+    /// Exclude paths matching this glob. May be repeated.
+    #[option(long = "exclude")]
+    exclude: Vec<String>,
+
+    /// Path to tally
+    #[positional(default = ".")]
+    path: PathBuf,
+}
+
+#[cfg(feature = "debug")]
 #[argue::args]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DebugLevel {
@@ -112,7 +161,7 @@ enum DebugLevel {
 
 fn main() {
     if let Err(error) = run() {
-        #[cfg(feature = "trace")]
+        #[cfg(feature = "debug")]
         if trace::enabled() {
             trace_event!(
                 "run_error",
@@ -131,7 +180,7 @@ fn main() {
 
 fn run() -> io::Result<()> {
     run_inner()?;
-    #[cfg(feature = "trace")]
+    #[cfg(feature = "debug")]
     if trace::enabled() {
         let path = trace::finish()?;
         eprintln!("Trace appended to {}", path.display());
@@ -146,24 +195,18 @@ fn run_inner() -> io::Result<()> {
         return Ok(());
     }
 
-    let max_debug = args.debug == DebugLevel::Max;
-    #[cfg(not(feature = "trace"))]
-    if max_debug {
-        return Err(io::Error::new(
-            ErrorKind::Unsupported,
-            "--debug=max requires a build with --features trace",
-        ));
-    }
-    let trace_output = trace_output::TraceOutput::current()?;
-    if trace_output.matches_file(&args.path) {
-        return Err(io::Error::new(
-            ErrorKind::InvalidInput,
-            format!("{} is tally's trace output", args.path.display()),
-        ));
-    }
-    #[cfg(feature = "trace")]
-    if max_debug {
-        trace::start()?;
+    #[cfg(feature = "debug")]
+    {
+        let trace_output = trace_output::TraceOutput::current()?;
+        if trace_output.matches_file(&args.path) {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                format!("{} is tally's trace output", args.path.display()),
+            ));
+        }
+        if args.debug == DebugLevel::Max {
+            trace::start()?;
+        }
     }
     trace_event!(
         "run_start",
@@ -191,7 +234,10 @@ fn run_inner() -> io::Result<()> {
     }
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
+    #[cfg(feature = "debug")]
     let debug = args.debug != DebugLevel::Off;
+    #[cfg(not(feature = "debug"))]
+    let debug = false;
     let override_root = if path_is_dir {
         args.path.as_path()
     } else {
@@ -210,13 +256,15 @@ fn run_inner() -> io::Result<()> {
         (progress_done, show_progress(Arc::clone(&sink), done))
     });
 
+    #[cfg(feature = "debug")]
     let timer = debug.then(debug::Timer::start);
+    #[cfg(feature = "debug")]
     let mut scan = None;
     if path_is_dir && args.tracked {
         let files = git_files(&args.path)?;
         parse_file_list(files, &args.path, &overrides, &sink, debug)?;
     } else if path_is_dir {
-        scan = Some(scan_directory(
+        let report = scan_directory(
             &args.path,
             Arc::clone(&sink),
             !args.all,
@@ -224,7 +272,15 @@ fn run_inner() -> io::Result<()> {
             adaptive_threads,
             debug,
             overrides,
-        )?);
+        )?;
+        #[cfg(feature = "debug")]
+        {
+            scan = Some(report);
+        }
+        #[cfg(not(feature = "debug"))]
+        {
+            let _ = report;
+        }
     } else if !args.tracked
         || git_files(override_root)?.iter().any(|path| {
             path == &override_root.join(args.path.strip_prefix(override_root).unwrap_or(&args.path))
@@ -237,6 +293,7 @@ fn run_inner() -> io::Result<()> {
             parse_single_file(&args.path, &sink, debug)?;
         }
     }
+    #[cfg(feature = "debug")]
     let timing = timer.map(debug::Timer::finish);
     trace_event!("scan_complete", Some(&args.path), serde_json::json!({}));
 
@@ -259,6 +316,7 @@ fn run_inner() -> io::Result<()> {
             output::print_summary(&summary, std::io::stdout().is_terminal())?;
         }
 
+        #[cfg(feature = "debug")]
         if let Some(timing) = timing {
             debug::print(timing, scan, &summary)?;
             output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
@@ -305,8 +363,10 @@ fn parse_file_list(
     sink: &file::Sink,
     verbose: bool,
 ) -> io::Result<()> {
+    #[cfg(feature = "debug")]
     let trace_output = trace_output::TraceOutput::current()?;
     for path in files {
+        #[cfg(feature = "debug")]
         if trace_output.matches_file(&path) {
             continue;
         }
@@ -353,7 +413,11 @@ fn count_stdin(args: &Args) -> io::Result<()> {
     }
     let sink = file::Sink::new();
     let mut batch = Batch::default();
-    if let Some(stats) = file::parse_stdin(args.debug != DebugLevel::Off)? {
+    #[cfg(feature = "debug")]
+    let debug = args.debug != DebugLevel::Off;
+    #[cfg(not(feature = "debug"))]
+    let debug = false;
+    if let Some(stats) = file::parse_stdin(debug)? {
         batch.add(stats);
     }
     sink.add_batch(&mut batch);
@@ -422,7 +486,7 @@ fn default_threads(path_is_dir: bool) -> usize {
 }
 
 fn parse_single_file(path: &Path, sink: &file::Sink, debug: bool) -> io::Result<()> {
-    #[cfg(feature = "trace")]
+    #[cfg(feature = "debug")]
     let _file_context = trace::file_context(path);
     let mut batch = Batch::default();
     if let Some(file_stats) = parse_file(path, debug)? {
@@ -481,6 +545,7 @@ mod tests {
         let args = Args::parse_from(["tally"]).unwrap();
 
         assert!(!args.all);
+        #[cfg(feature = "debug")]
         assert_eq!(args.debug, DebugLevel::Off);
         assert!(!args.json);
         assert!(!args.version);
@@ -508,6 +573,7 @@ mod tests {
         assert_eq!(args.exclude, ["tests/**", "*.ts"]);
     }
 
+    #[cfg(feature = "debug")]
     #[test]
     fn args_parse_flags_options_and_path() {
         let args = Args::parse_from(["tally", "--all", "--json", "-d", "-j", "2", "src"]).unwrap();

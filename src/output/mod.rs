@@ -4,7 +4,9 @@ mod table;
 use crate::file::{Stats, Summary};
 
 pub use json::print_json;
-pub use table::{format_number, print_summary, print_unknown_formats};
+#[cfg(feature = "debug")]
+pub use table::print_unknown_formats;
+pub use table::{format_number, print_summary};
 
 pub(crate) const DIM_STYLE: &str = "\x1b[2m";
 
@@ -41,6 +43,7 @@ mod tests {
                 code: 200,
                 ..Stats::default()
             },
+            #[cfg(feature = "debug")]
             unknown_formats: Vec::new(),
             languages: vec![
                 (

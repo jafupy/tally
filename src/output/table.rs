@@ -92,6 +92,7 @@ fn print_separator(output: &mut impl Write, widths: TableWidths, color: bool) ->
     print_styled(output, &line, color, super::DIM_STYLE)
 }
 
+#[cfg(feature = "debug")]
 pub fn print_unknown_formats(summary: &Summary, color: bool) -> io::Result<()> {
     if summary.unknown_formats.is_empty() {
         return Ok(());
