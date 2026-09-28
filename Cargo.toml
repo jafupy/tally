@@ -5,7 +5,7 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [features]
-trace = []
+debug = []
 
 [dependencies]
 argue = { git = "https://github.com/jafupy/argue" }

@@ -63,6 +63,8 @@ Values 0 and 1 select a serial directory scan.
 Tracked-file, diff, and standard-input counting do not use this setting.
 .TP
 .B \-d, \-\-debug[=summary|max]
+Available only in binaries built with
+.BR "cargo build --release --features debug" .
 Print a diagnostic summary on standard error after a file or directory count.
 It includes wall and CPU time, worker and queue measurements for directory
 scans, and a breakdown of unknown file formats.
@@ -73,9 +75,7 @@ select the summary; the explicit form is
 .BR \-\-debug=summary .
 Use
 .B \-\-debug=max
-for the summary and a full event trace. This requires a binary built with
-.BR "cargo build --release --features trace" ;
-ordinary release binaries reject this mode.
+for the summary and a full event trace.
 The trace appends JSON Lines to
 .B .tallydebug
 in the current directory, records file paths and scan activity, and excludes

@@ -61,7 +61,7 @@ fn parse_file_buffered_inner<'a>(
     buffer: &'a mut [u8],
     completed_bytes: Option<&'a AtomicU64>,
 ) -> io::Result<Option<FileStats>> {
-    #[cfg(feature = "trace")]
+    #[cfg(feature = "debug")]
     let _file_context = crate::trace::file_context(path);
     let _file_span = trace_span!("parse_file", Some(path));
     let file = {
@@ -112,7 +112,13 @@ fn parse_file_buffered_inner<'a>(
             trace_event!("language_unknown", Some(path), serde_json::json!({}));
             let _count_span = trace_span!("count_lines", Some(path));
             let stats = count_lines(reader, &UNKNOWN)?;
+            #[cfg(feature = "debug")]
             let format = debug.then(|| unknown_format(path)).flatten();
+            #[cfg(not(feature = "debug"))]
+            let format = {
+                let _ = debug;
+                None
+            };
             trace_event!(
                 "file_counted",
                 Some(path),
@@ -152,7 +158,13 @@ fn parse_reader(
         }
         None => {
             let stats = count_lines(reader, &UNKNOWN)?;
+            #[cfg(feature = "debug")]
             let format = verbose.then(|| unknown_format(path)).flatten();
+            #[cfg(not(feature = "debug"))]
+            let format = {
+                let _ = verbose;
+                None
+            };
             Ok(Some(FileStats::Unknown { format, stats }))
         }
     }
@@ -203,6 +215,7 @@ fn text_prefix(prefix: &[u8]) -> Option<&str> {
     }
 }
 
+#[cfg(feature = "debug")]
 fn unknown_format(path: &Path) -> Option<String> {
     if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
         return Some(format!(".{extension}"));
@@ -304,7 +317,7 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
             for newline in memchr_iter(b'\n', buffer) {
                 let end = newline + 1;
                 let line = &buffer[start..end];
-                #[cfg(feature = "trace")]
+                #[cfg(feature = "debug")]
                 let before = (stats.code, stats.comments, stats.blanks);
 
                 if let Some(mut state) = long_line.take() {
@@ -337,7 +350,7 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
                     state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
                     partial_line.clear();
                 }
-                #[cfg(feature = "trace")]
+                #[cfg(feature = "debug")]
                 trace_event!(
                     "line_classified",
                     None,
@@ -376,7 +389,7 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
         reader.consume(consumed);
     }
 
-    #[cfg(feature = "trace")]
+    #[cfg(feature = "debug")]
     let before = (stats.code, stats.comments, stats.blanks);
     if let Some(state) = long_line {
         state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
@@ -390,7 +403,7 @@ fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> io::Result<S
             true,
         );
     }
-    #[cfg(feature = "trace")]
+    #[cfg(feature = "debug")]
     if stats.lines > before.0 + before.1 + before.2 {
         trace_event!(
             "line_classified",
