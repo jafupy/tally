@@ -286,7 +286,22 @@ impl Repository {
                 let path = path_from_bytes(entry.path(&index).as_ref());
                 if let Ok(relative) = path.strip_prefix(&self.prefix) {
                     if include(relative) {
-                        files.entry(path).or_default().indexed = true;
+                        let skip_worktree =
+                            entry.flags.contains(gix_index::entry::Flags::SKIP_WORKTREE);
+                        let present = skip_worktree
+                            && self.workdir.as_ref().is_some_and(|workdir| {
+                                workdir
+                                    .join(&path)
+                                    .symlink_metadata()
+                                    .is_ok_and(|metadata| metadata.file_type().is_file())
+                            });
+                        let versions = files.entry(path).or_default();
+                        if skip_worktree {
+                            versions.new = Some(BlobId(entry.id));
+                            versions.indexed = present;
+                        } else {
+                            versions.indexed = true;
+                        }
                     }
                 }
             }
