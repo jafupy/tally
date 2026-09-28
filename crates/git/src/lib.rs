@@ -290,10 +290,7 @@ impl Repository {
                             entry.flags.contains(gix_index::entry::Flags::SKIP_WORKTREE);
                         let present = skip_worktree
                             && self.workdir.as_ref().is_some_and(|workdir| {
-                                workdir
-                                    .join(&path)
-                                    .symlink_metadata()
-                                    .is_ok_and(|metadata| metadata.file_type().is_file())
+                                workdir.join(&path).symlink_metadata().is_ok()
                             });
                         let versions = files.entry(path).or_default();
                         if skip_worktree {
