@@ -362,7 +362,15 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tally-stats",
  "toml",
+]
+
+[[package]]
+name = "tally-stats"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

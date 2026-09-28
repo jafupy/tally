@@ -14,9 +14,10 @@ use std::time::Duration;
 use std::time::Instant;
 
 fn new_scanner(sink: Arc<file::Sink>, failed: Arc<AtomicBool>, debug: bool) -> ScanWorker {
+    let batch = Batch::with_samples(sink.collects_samples());
     ScanWorker {
         sink,
-        batch: Batch::default(),
+        batch,
         debug,
         failed,
         buffer: file::read_buffer(),
