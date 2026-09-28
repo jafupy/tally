@@ -36,12 +36,12 @@ IQR; and `sqrt(sumsq(sum()/count())/count())` recreates SD.
 Formula names must be unique; division by zero and other undefined results
 appear as `-` in tables and `null` in JSON.
 
+Build with `cargo build --release --features debug` to enable diagnostics.
 Use `tally --debug .` to print scan timing, CPU usage, worker and queue activity,
 and unknown file formats to stderr. It can be combined with `--json`.
 
-For a detailed timestamped JSONL trace, build with `cargo build --release --features trace`
-and run `tally --debug=max .`. This appends to `.tallydebug` in the current
-directory. It records per-file and per-line activity, so traces of large trees
+For a detailed timestamped JSONL trace, run `tally --debug=max .`. This
+appends to `.tallydebug` in the current directory. It records per-file and per-line activity, so traces of large trees
 can be very large. `clock_count` is a monotonic clock tick count (not CPU cycles).
 Tally excludes this trace file from directory scans and rejects it as an explicit input.
 

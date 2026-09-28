@@ -93,6 +93,7 @@ mod tests {
         let summary = Summary {
             all: stats,
             unknown: stats,
+            #[cfg(feature = "debug")]
             unknown_formats: Vec::new(),
             languages: Vec::new(),
             samples: Vec::new(),

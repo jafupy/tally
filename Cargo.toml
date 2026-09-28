@@ -9,7 +9,7 @@ members = [".", "crates/tally-stats"]
 resolver = "3"
 
 [features]
-trace = []
+debug = []
 
 [dependencies]
 argue = { git = "https://github.com/jafupy/argue" }

@@ -2,6 +2,7 @@ use crate::{
     file::FileStats,
     language::{self, LanguageId},
 };
+#[cfg(feature = "debug")]
 use std::collections::HashMap;
 use std::ops::AddAssign;
 use std::sync::{
@@ -20,6 +21,7 @@ struct SinkInner {
     all: Stats,
     unknown: Stats,
     per_language: Vec<Stats>,
+    #[cfg(feature = "debug")]
     unknown_formats: HashMap<String, u64>,
     samples: Vec<(Option<LanguageId>, Stats)>,
 }
@@ -74,6 +76,7 @@ impl Sink {
             *batch_stats = Stats::default();
         }
 
+        #[cfg(feature = "debug")]
         for (format, files) in batch.unknown_formats.drain() {
             *sink.unknown_formats.entry(format).or_default() += files;
         }
@@ -99,11 +102,13 @@ impl Sink {
 
         languages.sort_by_key(|&(language_id, _)| language_id.0);
 
+        #[cfg(feature = "debug")]
         let mut unknown_formats = sink
             .unknown_formats
             .iter()
             .map(|(format, &files)| (format.clone(), files))
             .collect::<Vec<_>>();
+        #[cfg(feature = "debug")]
         unknown_formats.sort_by(|(left_format, left_files), (right_format, right_files)| {
             right_files
                 .cmp(left_files)
@@ -113,6 +118,7 @@ impl Sink {
         Summary {
             all: sink.all,
             unknown: sink.unknown,
+            #[cfg(feature = "debug")]
             unknown_formats,
             languages,
             samples: sink.samples.clone(),
@@ -125,6 +131,7 @@ pub struct Batch {
     all: Stats,
     unknown: Stats,
     per_language: Vec<Stats>,
+    #[cfg(feature = "debug")]
     unknown_formats: HashMap<String, u64>,
     samples: Vec<(Option<LanguageId>, Stats)>,
 }
@@ -136,6 +143,7 @@ impl Default for Batch {
             all: Stats::default(),
             unknown: Stats::default(),
             per_language: vec![Stats::default(); language::count()],
+            #[cfg(feature = "debug")]
             unknown_formats: HashMap::new(),
             samples: Vec::new(),
         }
@@ -150,7 +158,7 @@ impl Batch {
     }
 
     pub fn add(&mut self, file_stats: FileStats) {
-        #[cfg(feature = "trace")]
+        #[cfg(feature = "debug")]
         let (lines, known) = match &file_stats {
             FileStats::Known { stats, .. } => (stats.lines, true),
             FileStats::Unknown { stats, .. } => (stats.lines, false),
@@ -174,6 +182,9 @@ impl Batch {
                 }
                 self.all += stats;
                 self.unknown += stats;
+                #[cfg(not(feature = "debug"))]
+                let _ = format;
+                #[cfg(feature = "debug")]
                 if let Some(format) = format {
                     *self.unknown_formats.entry(format).or_default() += 1;
                 }
@@ -188,6 +199,7 @@ impl Batch {
     fn clear(&mut self) {
         self.all = Stats::default();
         self.unknown = Stats::default();
+        #[cfg(feature = "debug")]
         self.unknown_formats.clear();
     }
 }
@@ -195,6 +207,7 @@ impl Batch {
 pub struct Summary {
     pub all: Stats,
     pub unknown: Stats,
+    #[cfg(feature = "debug")]
     pub unknown_formats: Vec<(String, u64)>,
     pub languages: Vec<(LanguageId, Stats)>,
     pub samples: Vec<(Option<LanguageId>, Stats)>,
