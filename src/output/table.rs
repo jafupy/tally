@@ -1,15 +1,16 @@
-use super::{calculate_extended, summary_rows};
+use super::{ExtendedStats, summary_rows};
 use crate::file::{Stats, Summary};
 use std::io::{self, Write};
 use tally_stats::Kind;
 
 pub fn print_summary(summary: &Summary, color: bool, kinds: &[Kind]) -> io::Result<()> {
     let mut output = io::stdout().lock();
+    let extended = ExtendedStats::new(summary, kinds);
     let rows = summary_rows(summary)
         .into_iter()
-        .map(|(name, stats)| table_row(summary, name, stats, Some(name), kinds))
+        .map(|(name, stats)| table_row(name, stats, extended.language(name), kinds))
         .collect::<Vec<_>>();
-    let total = table_row(summary, "Total", summary.all, None, kinds);
+    let total = table_row("Total", summary.all, &extended.total, kinds);
     let widths = table_widths(&rows, &total, kinds);
 
     print_header(&mut output, &widths, kinds, color)?;
@@ -27,16 +28,14 @@ struct TableRow<'a> {
 }
 
 fn table_row<'a>(
-    summary: &Summary,
     name: &'a str,
     stats: Stats,
-    language: Option<&str>,
+    values: &[(Kind, tally_stats::Values)],
     kinds: &[Kind],
 ) -> TableRow<'a> {
-    let values = calculate_extended(summary, language, kinds);
     let mut extra = Vec::with_capacity(kinds.len() * 3);
     for metric in 0..3 {
-        for (kind, value) in &values {
+        for (kind, value) in values {
             let value = match metric {
                 0 => value.blanks,
                 1 => value.comments,

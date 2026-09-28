@@ -1,4 +1,4 @@
-use super::{calculate_extended, summary_rows};
+use super::{ExtendedStats, summary_rows};
 use crate::file::{Stats, Summary};
 use std::collections::BTreeMap;
 use std::io::{self, Write};
@@ -42,30 +42,26 @@ impl From<Stats> for JsonStats {
 }
 
 fn json_summary(summary: &Summary, kinds: &[Kind]) -> JsonSummary {
+    let extended = ExtendedStats::new(summary, kinds);
     JsonSummary {
         languages: summary_rows(summary)
             .into_iter()
             .map(|(language, stats)| JsonLanguage {
                 language,
-                stats: with_extended(summary, Some(language), stats, kinds),
+                stats: with_extended(stats, extended.language(language), kinds),
             })
             .collect(),
-        total: with_extended(summary, None, summary.all, kinds),
+        total: with_extended(summary.all, &extended.total, kinds),
     }
 }
 
-fn with_extended(
-    summary: &Summary,
-    language: Option<&str>,
-    stats: Stats,
-    kinds: &[Kind],
-) -> JsonStats {
+fn with_extended(stats: Stats, values: &[(Kind, Values)], kinds: &[Kind]) -> JsonStats {
     let mut json: JsonStats = stats.into();
     if !kinds.is_empty() {
         json.extended = Some(
-            calculate_extended(summary, language, kinds)
-                .into_iter()
-                .map(|(kind, values)| (kind.name(), values))
+            values
+                .iter()
+                .map(|(kind, values)| (kind.name(), *values))
                 .collect(),
         );
     }
