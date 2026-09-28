@@ -59,7 +59,7 @@ use std::{
 #[argue::parser(
     name = "tally",
     about = "Count and inspect a codebase",
-    long_about = "Diff usage: tally [path] --diff [revision]\nThe path defaults to . and the revision to HEAD. Put an explicit path before --diff."
+    long_about = "Diff usage: tally [path] --diff [revision] [--diff revision]\nOne revision compares with the working tree; two revisions compare with each other. The path defaults to . and the first revision to HEAD. Put an explicit path before --diff."
 )]
 #[derive(Debug)]
 struct Args {
@@ -95,9 +95,9 @@ struct Args {
     )]
     extended: Vec<String>,
 
-    /// Compare the working tree against an optional git revision (default: HEAD).
+    /// Compare a git revision with the working tree, or repeat to compare two revisions.
     #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
-    diff: Option<String>,
+    diff: Vec<String>,
 
     /// Count only files known to git.
     #[flag(long = "tracked")]
@@ -120,7 +120,7 @@ struct Args {
 #[argue::parser(
     name = "tally",
     about = "Count and inspect a codebase",
-    long_about = "Diff usage: tally [path] --diff [revision]\nThe path defaults to . and the revision to HEAD. Put an explicit path before --diff."
+    long_about = "Diff usage: tally [path] --diff [revision] [--diff revision]\nOne revision compares with the working tree; two revisions compare with each other. The path defaults to . and the first revision to HEAD. Put an explicit path before --diff."
 )]
 #[derive(Debug)]
 struct Args {
@@ -152,9 +152,9 @@ struct Args {
     )]
     extended: Vec<String>,
 
-    /// Compare the working tree against an optional git revision (default: HEAD).
+    /// Compare a git revision with the working tree, or repeat to compare two revisions.
     #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
-    diff: Option<String>,
+    diff: Vec<String>,
 
     /// Count only files known to git.
     #[flag(long = "tracked")]
@@ -220,6 +220,11 @@ fn run_inner() -> io::Result<()> {
         return Ok(());
     }
 
+    let metadata = if args.path == Path::new("-") {
+        None
+    } else {
+        Some(std::fs::metadata(&args.path)?)
+    };
     let trace_output = trace_output::TraceOutput::current()?;
     if trace_output.matches_file(&args.path) {
         return Err(io::Error::new(
@@ -241,10 +246,7 @@ fn run_inner() -> io::Result<()> {
         return count_stdin(&args, &extended);
     }
 
-    let metadata = {
-        let _span = trace_span!("path_metadata", Some(&args.path));
-        std::fs::metadata(&args.path)?
-    };
+    let metadata = metadata.unwrap();
     let path_is_dir = metadata.is_dir();
     if !path_is_dir && !metadata.is_file() {
         return Err(io::Error::new(
@@ -252,9 +254,11 @@ fn run_inner() -> io::Result<()> {
             format!("{} is not a regular file or directory", args.path.display()),
         ));
     }
-    if !path_is_dir {
-        std::fs::File::open(&args.path)?;
-    }
+    let opened_file = if path_is_dir {
+        None
+    } else {
+        Some(std::fs::File::open(&args.path)?)
+    };
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
     #[cfg(feature = "debug")]
@@ -269,15 +273,30 @@ fn run_inner() -> io::Result<()> {
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."))
     };
-    let overrides = build_overrides(override_root, &args.include, &args.exclude)?;
-    if let Some(reference) = &args.diff {
+    let canonical_root = override_root.canonicalize()?;
+    let overrides = build_overrides(&canonical_root, &args.include, &args.exclude)?;
+    if let Some(reference) = args.diff.first() {
         if !extended.is_empty() {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,
                 "-x cannot be used with --diff",
             ));
         }
-        return diff::count(&args.path, reference, &overrides, args.json);
+        if args.diff.len() > 2 {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "--diff may be specified at most twice",
+            ));
+        }
+        return diff::count(
+            &args.path,
+            reference,
+            args.diff.get(1).map(String::as_str),
+            &overrides,
+            args.json,
+            threads,
+            adaptive_threads,
+        );
     }
     let sink = file::Sink::new_with_samples(!extended.is_empty());
     let progress = std::io::stderr().is_terminal().then(|| {
@@ -294,7 +313,7 @@ fn run_inner() -> io::Result<()> {
         parse_file_list(files, &args.path, &overrides, &sink, debug)?;
     } else if path_is_dir {
         let report = scan_directory(
-            &args.path,
+            &canonical_root,
             Arc::clone(&sink),
             !args.all,
             threads,
@@ -319,7 +338,7 @@ fn run_inner() -> io::Result<()> {
         if std::fs::symlink_metadata(&args.path)?.file_type().is_file()
             && file_is_included(&overrides, relative_path)
         {
-            parse_single_file(&args.path, &sink, debug)?;
+            parse_single_opened_file(&args.path, opened_file.unwrap(), &sink, debug)?;
         }
     }
     #[cfg(feature = "debug")]
@@ -355,7 +374,7 @@ fn run_inner() -> io::Result<()> {
 }
 
 fn build_overrides(root: &Path, includes: &[String], excludes: &[String]) -> io::Result<Override> {
-    let mut builder = OverrideBuilder::new(root.canonicalize()?);
+    let mut builder = OverrideBuilder::new(root.to_path_buf());
     for pattern in includes {
         builder.add(pattern).map_err(io::Error::other)?;
     }
@@ -368,21 +387,7 @@ fn build_overrides(root: &Path, includes: &[String], excludes: &[String]) -> io:
 }
 
 fn git_files(root: &Path) -> io::Result<Vec<PathBuf>> {
-    let mut command = std::process::Command::new("git");
-    command.current_dir(root);
-    command.args(["ls-files", "-z", "--cached", "--deduplicate"]);
-    let output = command.output()?;
-    if !output.status.success() {
-        return Err(io::Error::other(
-            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        ));
-    }
-    Ok(output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|path| !path.is_empty())
-        .map(|path| root.join(git_path(path)))
-        .collect())
+    tally_git::tracked_files(root)
 }
 
 fn parse_file_list(
@@ -420,19 +425,9 @@ fn file_is_included(overrides: &Override, relative_path: &Path) -> bool {
         })
 }
 
-#[cfg(unix)]
-fn git_path(bytes: &[u8]) -> PathBuf {
-    use std::os::unix::ffi::OsStringExt;
-    PathBuf::from(std::ffi::OsString::from_vec(bytes.to_vec()))
-}
-
-#[cfg(not(unix))]
-fn git_path(bytes: &[u8]) -> PathBuf {
-    PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
-}
-
 fn count_stdin(args: &Args, extended: &[tally_stats::Kind]) -> io::Result<()> {
-    if args.tracked || args.diff.is_some() || !args.include.is_empty() || !args.exclude.is_empty() {
+    if args.tracked || !args.diff.is_empty() || !args.include.is_empty() || !args.exclude.is_empty()
+    {
         return Err(io::Error::new(
             ErrorKind::InvalidInput,
             "git and path filters cannot be used with stdin",
@@ -530,6 +525,23 @@ fn parse_single_file(path: &Path, sink: &file::Sink, debug: bool) -> io::Result<
     Ok(())
 }
 
+fn parse_single_opened_file(
+    path: &Path,
+    opened_file: std::fs::File,
+    sink: &file::Sink,
+    debug: bool,
+) -> io::Result<()> {
+    #[cfg(feature = "debug")]
+    let _file_context = trace::file_context(path);
+    let mut batch = Batch::with_samples(sink.collects_samples());
+    if let Some(file_stats) = file::parse_opened_file(path, opened_file, debug)? {
+        batch.add(file_stats);
+    }
+    sink.record_progress(batch.files());
+    sink.add_batch(&mut batch);
+    Ok(())
+}
+
 fn show_progress(sink: Arc<file::Sink>, done: Receiver<()>) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let mut last_files = None;
@@ -583,7 +595,7 @@ mod tests {
         assert!(!args.json);
         assert!(!args.version);
         assert!(!args.tracked);
-        assert_eq!(args.diff, None);
+        assert!(args.diff.is_empty());
         assert!(args.include.is_empty());
         assert!(args.exclude.is_empty());
         assert_eq!(args.threads, None);

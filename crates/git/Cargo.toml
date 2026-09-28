@@ -1,0 +1,11 @@
+[package]
+name = "tally-git"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+gix-hash = { version = "0.26.2", features = ["sha1", "sha256"] }
+gix-index = "0.55.0"
+gix-object = "0.64.1"
+gix-odb = "0.84.0"

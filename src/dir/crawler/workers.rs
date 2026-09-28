@@ -2,7 +2,6 @@ use super::{Shared, list_directory};
 use crate::dir::ScanWorker;
 use crate::file::{self, Batch};
 use ignore::gitignore::Gitignore;
-use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::{
     Arc,
@@ -14,10 +13,9 @@ use std::time::Duration;
 use std::time::Instant;
 
 fn new_scanner(sink: Arc<file::Sink>, failed: Arc<AtomicBool>, debug: bool) -> ScanWorker {
-    let batch = Batch::with_samples(sink.collects_samples());
     ScanWorker {
+        batch: Batch::with_samples(sink.collects_samples()),
         sink,
-        batch,
         debug,
         failed,
         buffer: file::read_buffer(),
@@ -62,8 +60,6 @@ pub(super) fn run_single(
     let _span = trace_span!("worker_lifetime", None);
     trace_event!("worker_start", None, serde_json::json!({}));
     let mut scanner = new_scanner(sink, Arc::clone(&failed), debug);
-    let mut local_directories = VecDeque::new();
-    let mut local_files: VecDeque<Vec<PathBuf>> = VecDeque::new();
     #[cfg(feature = "debug")]
     let mut counting_time = Duration::ZERO;
     #[cfg(feature = "debug")]
@@ -72,7 +68,7 @@ pub(super) fn run_single(
     let mut idle_yields = 0;
     while !shared.done() {
         let mut worked = false;
-        if let Some(paths) = shared.files.pop().or_else(|| local_files.pop_front()) {
+        if let Some(paths) = shared.files.pop() {
             trace_event!(
                 "file_batch_pop",
                 None,
@@ -87,11 +83,7 @@ pub(super) fn run_single(
             );
             worked = true;
         }
-        if let Some(job) = shared
-            .directories
-            .pop()
-            .or_else(|| local_directories.pop_front())
-        {
+        if let Some(job) = shared.directories.pop() {
             trace_event!(
                 "directory_pop",
                 Some(&job.path),
@@ -99,23 +91,14 @@ pub(super) fn run_single(
             );
             #[cfg(feature = "debug")]
             let started = shared.metrics.as_ref().map(|_| Instant::now());
-            list_directory(
-                job,
-                shared,
-                &mut local_directories,
-                &mut local_files,
-                batch_size,
-                &global,
-                ignore_git,
-                &failed,
-            );
+            list_directory(job, shared, batch_size, &global, ignore_git, &failed);
             #[cfg(feature = "debug")]
             if let Some(started) = started {
                 listing_time += started.elapsed();
             }
             shared.pending_directories.fetch_sub(1, Ordering::AcqRel);
             worked = true;
-        } else if let Some(paths) = shared.files.pop().or_else(|| local_files.pop_front()) {
+        } else if let Some(paths) = shared.files.pop() {
             trace_event!(
                 "file_batch_pop",
                 None,
@@ -155,6 +138,7 @@ pub(super) fn run_single(
             .idle_yields
             .fetch_add(idle_yields, Ordering::Relaxed);
     }
+    #[cfg(feature = "debug")]
     trace_event!(
         "worker_exit",
         None,
