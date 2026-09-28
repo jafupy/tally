@@ -39,7 +39,6 @@ mod language;
 mod output;
 #[cfg(feature = "debug")]
 mod trace;
-#[cfg(feature = "debug")]
 mod trace_output;
 mod update;
 
@@ -195,18 +194,16 @@ fn run_inner() -> io::Result<()> {
         return Ok(());
     }
 
+    let trace_output = trace_output::TraceOutput::current()?;
+    if trace_output.matches_file(&args.path) {
+        return Err(io::Error::new(
+            ErrorKind::InvalidInput,
+            format!("{} is tally's trace output", args.path.display()),
+        ));
+    }
     #[cfg(feature = "debug")]
-    {
-        let trace_output = trace_output::TraceOutput::current()?;
-        if trace_output.matches_file(&args.path) {
-            return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                format!("{} is tally's trace output", args.path.display()),
-            ));
-        }
-        if args.debug == DebugLevel::Max {
-            trace::start()?;
-        }
+    if args.debug == DebugLevel::Max {
+        trace::start()?;
     }
     trace_event!(
         "run_start",
@@ -363,10 +360,8 @@ fn parse_file_list(
     sink: &file::Sink,
     verbose: bool,
 ) -> io::Result<()> {
-    #[cfg(feature = "debug")]
     let trace_output = trace_output::TraceOutput::current()?;
     for path in files {
-        #[cfg(feature = "debug")]
         if trace_output.matches_file(&path) {
             continue;
         }
