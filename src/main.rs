@@ -154,8 +154,21 @@ fn run_inner() -> io::Result<()> {
             "--debug=max requires a build with --features trace",
         ));
     }
-    let trace_output = trace_output::TraceOutput::current()?;
-    if trace_output.matches_file(&args.path) {
+    let metadata = if args.path == Path::new("-") {
+        None
+    } else {
+        Some(std::fs::metadata(&args.path)?)
+    };
+    let is_trace_file = if metadata.as_ref().is_some_and(std::fs::Metadata::is_file) {
+        match std::fs::symlink_metadata(".tallydebug") {
+            Ok(_) => trace_output::TraceOutput::current()?.matches_file(&args.path),
+            Err(error) if error.kind() == ErrorKind::NotFound => false,
+            Err(_) => trace_output::TraceOutput::current()?.matches_file(&args.path),
+        }
+    } else {
+        false
+    };
+    if is_trace_file {
         return Err(io::Error::new(
             ErrorKind::InvalidInput,
             format!("{} is tally's trace output", args.path.display()),
@@ -175,10 +188,7 @@ fn run_inner() -> io::Result<()> {
         return count_stdin(&args);
     }
 
-    let metadata = {
-        let _span = trace_span!("path_metadata", Some(&args.path));
-        std::fs::metadata(&args.path)?
-    };
+    let metadata = metadata.unwrap();
     let path_is_dir = metadata.is_dir();
     if !path_is_dir && !metadata.is_file() {
         return Err(io::Error::new(
@@ -186,9 +196,11 @@ fn run_inner() -> io::Result<()> {
             format!("{} is not a regular file or directory", args.path.display()),
         ));
     }
-    if !path_is_dir {
-        std::fs::File::open(&args.path)?;
-    }
+    let opened_file = if path_is_dir {
+        None
+    } else {
+        Some(std::fs::File::open(&args.path)?)
+    };
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
     let debug = args.debug != DebugLevel::Off;
@@ -200,7 +212,8 @@ fn run_inner() -> io::Result<()> {
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."))
     };
-    let overrides = build_overrides(override_root, &args.include, &args.exclude)?;
+    let canonical_root = override_root.canonicalize()?;
+    let overrides = build_overrides(&canonical_root, &args.include, &args.exclude)?;
     if let Some(reference) = args.diff.first() {
         if args.diff.len() > 2 {
             return Err(io::Error::new(
@@ -231,7 +244,7 @@ fn run_inner() -> io::Result<()> {
         parse_file_list(files, &args.path, &overrides, &sink, debug)?;
     } else if path_is_dir {
         scan = Some(scan_directory(
-            &args.path,
+            &canonical_root,
             Arc::clone(&sink),
             !args.all,
             threads,
@@ -248,7 +261,7 @@ fn run_inner() -> io::Result<()> {
         if std::fs::symlink_metadata(&args.path)?.file_type().is_file()
             && file_is_included(&overrides, relative_path)
         {
-            parse_single_file(&args.path, &sink, debug)?;
+            parse_single_opened_file(&args.path, opened_file.unwrap(), &sink, debug)?;
         }
     }
     let timing = timer.map(debug::Timer::finish);
@@ -282,7 +295,7 @@ fn run_inner() -> io::Result<()> {
 }
 
 fn build_overrides(root: &Path, includes: &[String], excludes: &[String]) -> io::Result<Override> {
-    let mut builder = OverrideBuilder::new(root.canonicalize()?);
+    let mut builder = OverrideBuilder::new(root.to_path_buf());
     for pattern in includes {
         builder.add(pattern).map_err(io::Error::other)?;
     }
@@ -416,6 +429,23 @@ fn parse_single_file(path: &Path, sink: &file::Sink, debug: bool) -> io::Result<
     let _file_context = trace::file_context(path);
     let mut batch = Batch::default();
     if let Some(file_stats) = parse_file(path, debug)? {
+        batch.add(file_stats);
+    }
+    sink.record_progress(batch.files());
+    sink.add_batch(&mut batch);
+    Ok(())
+}
+
+fn parse_single_opened_file(
+    path: &Path,
+    opened_file: std::fs::File,
+    sink: &file::Sink,
+    debug: bool,
+) -> io::Result<()> {
+    #[cfg(feature = "trace")]
+    let _file_context = trace::file_context(path);
+    let mut batch = Batch::default();
+    if let Some(file_stats) = file::parse_opened_file(path, opened_file, debug)? {
         batch.add(file_stats);
     }
     sink.record_progress(batch.files());

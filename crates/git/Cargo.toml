@@ -5,4 +5,7 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+gix-hash = { version = "0.26.2", features = ["sha1", "sha256"] }
+gix-index = "0.55.0"
+gix-object = "0.64.1"
+gix-odb = "0.84.0"

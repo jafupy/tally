@@ -38,12 +38,17 @@ pub fn parse_file(path: &Path, debug: bool) -> io::Result<Option<FileStats>> {
     parse_file_buffered(path, debug, &mut buffer)
 }
 
+pub fn parse_opened_file(path: &Path, file: File, debug: bool) -> io::Result<Option<FileStats>> {
+    let mut buffer = vec![0; BUFFER_BYTES];
+    parse_file_buffered_inner(path, debug, &mut buffer, None, Some(file))
+}
+
 pub fn parse_file_buffered(
     path: &Path,
     debug: bool,
     buffer: &mut [u8],
 ) -> io::Result<Option<FileStats>> {
-    parse_file_buffered_inner(path, debug, buffer, None)
+    parse_file_buffered_inner(path, debug, buffer, None, None)
 }
 
 pub fn parse_file_buffered_with_progress(
@@ -52,7 +57,7 @@ pub fn parse_file_buffered_with_progress(
     buffer: &mut [u8],
     completed_bytes: &AtomicU64,
 ) -> io::Result<Option<FileStats>> {
-    parse_file_buffered_inner(path, debug, buffer, Some(completed_bytes))
+    parse_file_buffered_inner(path, debug, buffer, Some(completed_bytes), None)
 }
 
 fn parse_file_buffered_inner<'a>(
@@ -60,13 +65,17 @@ fn parse_file_buffered_inner<'a>(
     debug: bool,
     buffer: &'a mut [u8],
     completed_bytes: Option<&'a AtomicU64>,
+    opened_file: Option<File>,
 ) -> io::Result<Option<FileStats>> {
     #[cfg(feature = "trace")]
     let _file_context = crate::trace::file_context(path);
     let _file_span = trace_span!("parse_file", Some(path));
     let file = {
         let _open_span = trace_span!("file_open", Some(path));
-        File::open(path)?
+        match opened_file {
+            Some(file) => file,
+            None => File::open(path)?,
+        }
     };
     trace_event!("file_opened", Some(path), serde_json::json!({}));
     let mut reader = ReusableBufReader::new(file, buffer, completed_bytes);

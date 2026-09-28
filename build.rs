@@ -67,8 +67,10 @@ struct Disambiguation {
 
 fn main() {
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        // libgit2 links these frameworks even when its HTTPS feature is disabled.
+        // Drop libraries that Git code does not actually use at runtime.
         println!("cargo:rustc-link-arg-bin=tally=-Wl,-dead_strip_dylibs");
+        // Compact rebases limit the Git backend's startup cost.
+        println!("cargo:rustc-link-arg-bin=tally=-Wl,-fixup_chains");
     }
     println!("cargo:rerun-if-changed=data/languages");
     println!("cargo:rerun-if-changed=data/files.toml");
