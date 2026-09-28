@@ -297,8 +297,10 @@ impl Repository {
                             });
                         let versions = files.entry(path).or_default();
                         if skip_worktree {
-                            versions.new = Some(BlobId(entry.id));
                             versions.indexed = present;
+                            if !present {
+                                versions.new = Some(BlobId(entry.id));
+                            }
                         } else {
                             versions.indexed = true;
                         }
