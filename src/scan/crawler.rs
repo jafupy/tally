@@ -6,7 +6,7 @@ mod rules;
 mod workers;
 
 use super::{report_file_error, scan_result};
-use crate::file;
+use crate::result;
 use crate::trace_output::TraceOutput;
 use crossbeam_queue::SegQueue;
 use ignore::gitignore::Gitignore;
@@ -219,7 +219,7 @@ pub(super) fn scan(
     ignore_git: bool,
     threads: usize,
     adaptive_threads: bool,
-    sink: Arc<file::Sink>,
+    sink: Arc<result::Sink>,
     debug: bool,
     overrides: Override,
 ) -> io::Result<ScanReport> {
@@ -246,7 +246,7 @@ pub(super) fn scan(
     let global = if ignore_git {
         let (global, error) = Gitignore::global();
         if let Some(error) = error {
-            if crate::dir::report_walk_error(&error) {
+            if crate::scan::report_walk_error(&error) {
                 failed.store(true, Ordering::Relaxed);
             }
         }

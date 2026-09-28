@@ -1,8 +1,15 @@
 mod crawler;
+mod selection;
+pub(crate) use selection::{
+    build_overrides, file_is_included, git_files, parse_file_list, parse_single_opened_file,
+};
 
 pub(crate) use crawler::ScanReport;
 
-use crate::file::{self, Batch};
+use crate::{
+    file,
+    result::{self, Batch},
+};
 use ignore::Error;
 use ignore::overrides::Override;
 use std::io;
@@ -16,7 +23,7 @@ const FLUSH_EVERY_FILES: u64 = 512;
 
 pub fn scan_directory(
     path: &Path,
-    sink: Arc<file::Sink>,
+    sink: Arc<result::Sink>,
     ignore_git: bool,
     threads: usize,
     adaptive_threads: bool,
@@ -66,7 +73,7 @@ fn report_file_error(path: &Path, error: &io::Error) -> bool {
 }
 
 struct ScanWorker {
-    sink: Arc<file::Sink>,
+    sink: Arc<result::Sink>,
     batch: Batch,
     debug: bool,
     failed: Arc<AtomicBool>,
@@ -138,7 +145,7 @@ mod tests {
         fs::write(root.join(".git/objects/data"), b"object").unwrap();
 
         for ignore_git in [true, false] {
-            let sink = file::Sink::new();
+            let sink = result::Sink::new();
             scan_directory(
                 &root,
                 Arc::clone(&sink),
@@ -167,7 +174,7 @@ mod tests {
             fs::write(root.join(format!("source.unique-{index}")), b"one line\n").unwrap();
         }
 
-        let sink = file::Sink::new();
+        let sink = result::Sink::new();
 
         scan_directory(
             &root,

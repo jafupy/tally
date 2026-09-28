@@ -64,7 +64,7 @@ fn matcher(path: &Path, failed: &AtomicBool) -> Gitignore {
         serde_json::json!({"patterns": matcher.len(), "error": error.is_some()})
     );
     if let Some(error) = error {
-        if crate::dir::report_walk_error(&error) {
+        if crate::scan::report_walk_error(&error) {
             failed.store(true, Ordering::Relaxed);
         }
     }
@@ -114,14 +114,14 @@ fn exclude_matcher(dir: &Path, failed: &AtomicBool) -> Gitignore {
     }
     let mut builder = GitignoreBuilder::new(dir);
     if let Some(error) = builder.add(&path) {
-        if crate::dir::report_walk_error(&error) {
+        if crate::scan::report_walk_error(&error) {
             failed.store(true, Ordering::Relaxed);
         }
     }
     match builder.build() {
         Ok(matcher) => matcher,
         Err(error) => {
-            if crate::dir::report_walk_error(&error) {
+            if crate::scan::report_walk_error(&error) {
                 failed.store(true, Ordering::Relaxed);
             }
             Gitignore::empty()

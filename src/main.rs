@@ -33,26 +33,26 @@ macro_rules! trace_span {
 #[cfg(feature = "debug")]
 mod debug;
 mod diff;
-mod dir;
 mod file;
 mod language;
 mod output;
+mod progress;
+mod result;
+mod scan;
 #[cfg(feature = "debug")]
 mod trace;
 mod trace_output;
 mod update;
 
-use dir::scan_directory;
-use file::{Batch, parse_file};
-use ignore::overrides::{Override, OverrideBuilder};
+use result::Batch;
+use scan::scan_directory;
+use scan::{
+    build_overrides, file_is_included, git_files, parse_file_list, parse_single_opened_file,
+};
 use std::{
     io::{self, ErrorKind, IsTerminal},
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        mpsc::{self, Receiver},
-    },
-    time::Duration,
+    sync::{Arc, mpsc},
 };
 
 #[cfg(feature = "debug")]
@@ -298,10 +298,10 @@ fn run_inner() -> io::Result<()> {
             adaptive_threads,
         );
     }
-    let sink = file::Sink::new_with_samples(!extended.is_empty());
+    let sink = result::Sink::new_with_samples(!extended.is_empty());
     let progress = std::io::stderr().is_terminal().then(|| {
         let (progress_done, done) = mpsc::channel();
-        (progress_done, show_progress(Arc::clone(&sink), done))
+        (progress_done, progress::show(Arc::clone(&sink), done))
     });
 
     #[cfg(feature = "debug")]
@@ -359,70 +359,27 @@ fn run_inner() -> io::Result<()> {
     {
         let _span = trace_span!("output", None);
         if args.json {
-            output::print_json(&summary, &extended)?;
+            output::write_json(&mut std::io::stdout().lock(), &summary, &extended)?;
         } else {
-            output::print_summary(&summary, std::io::stdout().is_terminal(), &extended)?;
+            output::write_summary(
+                &mut std::io::stdout().lock(),
+                &summary,
+                std::io::stdout().is_terminal(),
+                &extended,
+            )?;
         }
 
         #[cfg(feature = "debug")]
         if let Some(timing) = timing {
             debug::print(timing, scan, &summary)?;
-            output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
+            output::write_unknown_formats(
+                &mut std::io::stderr().lock(),
+                &summary,
+                std::io::stderr().is_terminal(),
+            )?;
         }
     }
     Ok(())
-}
-
-fn build_overrides(root: &Path, includes: &[String], excludes: &[String]) -> io::Result<Override> {
-    let mut builder = OverrideBuilder::new(root.to_path_buf());
-    for pattern in includes {
-        builder.add(pattern).map_err(io::Error::other)?;
-    }
-    for pattern in excludes {
-        builder
-            .add(&format!("!{pattern}"))
-            .map_err(io::Error::other)?;
-    }
-    builder.build().map_err(io::Error::other)
-}
-
-fn git_files(root: &Path) -> io::Result<Vec<PathBuf>> {
-    tally_git::tracked_files(root)
-}
-
-fn parse_file_list(
-    files: Vec<PathBuf>,
-    root: &Path,
-    overrides: &Override,
-    sink: &file::Sink,
-    verbose: bool,
-) -> io::Result<()> {
-    let trace_output = trace_output::TraceOutput::current()?;
-    for path in files {
-        if trace_output.matches_file(&path) {
-            continue;
-        }
-        if std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_file())
-            && file_is_included(overrides, path.strip_prefix(root).unwrap_or(&path))
-        {
-            parse_single_file(&path, sink, verbose)?;
-        }
-    }
-    Ok(())
-}
-
-// Paths are relative to the override root. Match the same paths as the walker,
-// including directory exclusions that prevent it from reaching a file.
-fn file_is_included(overrides: &Override, relative_path: &Path) -> bool {
-    relative_path
-        .ancestors()
-        .take_while(|path| !path.as_os_str().is_empty())
-        .enumerate()
-        .all(|(depth, path)| {
-            !overrides
-                .matched(overrides.path().join(path), depth > 0)
-                .is_ignore()
-        })
 }
 
 fn count_stdin(args: &Args, extended: &[tally_stats::Kind]) -> io::Result<()> {
@@ -433,7 +390,7 @@ fn count_stdin(args: &Args, extended: &[tally_stats::Kind]) -> io::Result<()> {
             "git and path filters cannot be used with stdin",
         ));
     }
-    let sink = file::Sink::new_with_samples(!extended.is_empty());
+    let sink = result::Sink::new_with_samples(!extended.is_empty());
     let mut batch = Batch::with_samples(!extended.is_empty());
     #[cfg(feature = "debug")]
     let debug = args.debug != DebugLevel::Off;
@@ -445,9 +402,14 @@ fn count_stdin(args: &Args, extended: &[tally_stats::Kind]) -> io::Result<()> {
     sink.add_batch(&mut batch);
     let summary = sink.snapshot();
     if args.json {
-        output::print_json(&summary, extended)
+        output::write_json(&mut std::io::stdout().lock(), &summary, extended)
     } else {
-        output::print_summary(&summary, std::io::stdout().is_terminal(), extended)
+        output::write_summary(
+            &mut std::io::stdout().lock(),
+            &summary,
+            std::io::stdout().is_terminal(),
+            extended,
+        )
     }
 }
 
@@ -511,61 +473,6 @@ fn default_threads(path_is_dir: bool) -> usize {
     }
 
     std::thread::available_parallelism().map_or(1, usize::from)
-}
-
-fn parse_single_file(path: &Path, sink: &file::Sink, debug: bool) -> io::Result<()> {
-    #[cfg(feature = "debug")]
-    let _file_context = trace::file_context(path);
-    let mut batch = Batch::with_samples(sink.collects_samples());
-    if let Some(file_stats) = parse_file(path, debug)? {
-        batch.add(file_stats);
-    }
-    sink.record_progress(batch.files());
-    sink.add_batch(&mut batch);
-    Ok(())
-}
-
-fn parse_single_opened_file(
-    path: &Path,
-    opened_file: std::fs::File,
-    sink: &file::Sink,
-    debug: bool,
-) -> io::Result<()> {
-    #[cfg(feature = "debug")]
-    let _file_context = trace::file_context(path);
-    let mut batch = Batch::with_samples(sink.collects_samples());
-    if let Some(file_stats) = file::parse_opened_file(path, opened_file, debug)? {
-        batch.add(file_stats);
-    }
-    sink.record_progress(batch.files());
-    sink.add_batch(&mut batch);
-    Ok(())
-}
-
-fn show_progress(sink: Arc<file::Sink>, done: Receiver<()>) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(move || {
-        let mut last_files = None;
-
-        loop {
-            match done.recv_timeout(Duration::from_millis(250)) {
-                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    let files = sink.files();
-                    if last_files == Some(files) {
-                        continue;
-                    }
-
-                    last_files = Some(files);
-                    eprint!(
-                        "\r\x1b[36mprocessed {} files\x1b[0m",
-                        output::format_number(files)
-                    );
-                }
-            }
-        }
-
-        eprint!("\r{:<24}\r", "");
-    })
 }
 
 #[cfg(test)]

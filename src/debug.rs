@@ -1,5 +1,5 @@
-use crate::dir::ScanReport;
-use crate::file::Summary;
+use crate::result::Summary;
+use crate::scan::ScanReport;
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 

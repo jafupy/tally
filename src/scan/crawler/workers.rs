@@ -1,6 +1,9 @@
 use super::{Shared, list_directory};
-use crate::dir::ScanWorker;
-use crate::file::{self, Batch};
+use crate::scan::ScanWorker;
+use crate::{
+    file,
+    result::{self, Batch},
+};
 use ignore::gitignore::Gitignore;
 use std::path::PathBuf;
 use std::sync::{
@@ -12,7 +15,7 @@ use std::time::Duration;
 #[cfg(feature = "debug")]
 use std::time::Instant;
 
-fn new_scanner(sink: Arc<file::Sink>, failed: Arc<AtomicBool>, debug: bool) -> ScanWorker {
+fn new_scanner(sink: Arc<result::Sink>, failed: Arc<AtomicBool>, debug: bool) -> ScanWorker {
     ScanWorker {
         batch: Batch::with_samples(sink.collects_samples()),
         sink,
@@ -50,7 +53,7 @@ fn count_batch(
 
 pub(super) fn run_single(
     shared: &Shared,
-    sink: Arc<file::Sink>,
+    sink: Arc<result::Sink>,
     failed: Arc<AtomicBool>,
     global: Gitignore,
     ignore_git: bool,
@@ -148,7 +151,7 @@ pub(super) fn run_single(
 
 fn spawn_worker(
     shared: &Arc<Shared>,
-    sink: &Arc<file::Sink>,
+    sink: &Arc<result::Sink>,
     failed: &Arc<AtomicBool>,
     global: &Gitignore,
     ignore_git: bool,
@@ -164,7 +167,7 @@ fn spawn_worker(
 
 pub(super) fn run_shared(
     shared: &Arc<Shared>,
-    sink: Arc<file::Sink>,
+    sink: Arc<result::Sink>,
     failed: Arc<AtomicBool>,
     global: Gitignore,
     ignore_git: bool,
