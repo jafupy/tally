@@ -1,4 +1,4 @@
-#[cfg(feature = "trace")]
+#[cfg(feature = "debug")]
 #[macro_export]
 macro_rules! trace_event {
     ($name:expr, $path:expr, $detail:expr) => {
@@ -8,13 +8,13 @@ macro_rules! trace_event {
     };
 }
 
-#[cfg(not(feature = "trace"))]
+#[cfg(not(feature = "debug"))]
 #[macro_export]
 macro_rules! trace_event {
     ($($arg:tt)*) => {};
 }
 
-#[cfg(feature = "trace")]
+#[cfg(feature = "debug")]
 #[macro_export]
 macro_rules! trace_span {
     ($name:expr, $path:expr) => {
@@ -22,7 +22,7 @@ macro_rules! trace_span {
     };
 }
 
-#[cfg(not(feature = "trace"))]
+#[cfg(not(feature = "debug"))]
 #[macro_export]
 macro_rules! trace_span {
     ($($arg:tt)*) => {
@@ -30,13 +30,14 @@ macro_rules! trace_span {
     };
 }
 
+#[cfg(feature = "debug")]
 mod debug;
 mod diff;
 mod dir;
 mod file;
 mod language;
 mod output;
-#[cfg(feature = "trace")]
+#[cfg(feature = "debug")]
 mod trace;
 mod trace_output;
 mod update;
@@ -54,6 +55,7 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "debug")]
 #[argue::parser(
     name = "tally",
     about = "Count and inspect a codebase",
@@ -73,13 +75,25 @@ struct Args {
     #[option(short = 'j', long = "threads")]
     threads: Option<usize>,
 
-    /// Print diagnostics; use --debug=max for a full trace.
-    #[option(short = 'd', long = "debug", default = DebugLevel::Off, optional = "summary", equals = true, value_name = "LEVEL")]
+    /// Print scan diagnostics (summary by default); use --debug=max for a full trace.
+    #[option(short = 'd', long = "debug", default = DebugLevel::Off, optional = "summary", equals = true, value_name = "summary|max")]
     debug: DebugLevel,
 
     /// Output results as JSON.
     #[flag(long = "json")]
     json: bool,
+
+    /// Add per-file Blank, Comment, and Code columns.
+    /// Use min, max, mean, median, sd, iqr, variance, p0..p100, or NAME=EXPR.
+    /// Bare -x selects min, max, median, and sd.
+    #[option(
+        short = 'x',
+        long = "extended",
+        optional = "default",
+        equals = true,
+        value_name = "STAT"
+    )]
+    extended: Vec<String>,
 
     /// Compare a git revision with the working tree, or repeat to compare two revisions.
     #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
@@ -102,6 +116,64 @@ struct Args {
     path: PathBuf,
 }
 
+#[cfg(not(feature = "debug"))]
+#[argue::parser(
+    name = "tally",
+    about = "Count and inspect a codebase",
+    long_about = "Diff usage: tally [path] --diff [revision] [--diff revision]\nOne revision compares with the working tree; two revisions compare with each other. The path defaults to . and the first revision to HEAD. Put an explicit path before --diff."
+)]
+#[derive(Debug)]
+struct Args {
+    /// Print the version and check GitHub for updates.
+    #[flag(short = 'V', long = "version")]
+    version: bool,
+
+    /// Include files ignored by gitignore rules.
+    #[flag(short = 'a', long = "all")]
+    all: bool,
+
+    /// Number of worker threads. Defaults to adaptive scaling for directories and 1 for a file.
+    #[option(short = 'j', long = "threads")]
+    threads: Option<usize>,
+
+    /// Output results as JSON.
+    #[flag(long = "json")]
+    json: bool,
+
+    /// Add per-file Blank, Comment, and Code columns.
+    /// Use min, max, mean, median, sd, iqr, variance, p0..p100, or NAME=EXPR.
+    /// Bare -x selects min, max, median, and sd.
+    #[option(
+        short = 'x',
+        long = "extended",
+        optional = "default",
+        equals = true,
+        value_name = "STAT"
+    )]
+    extended: Vec<String>,
+
+    /// Compare a git revision with the working tree, or repeat to compare two revisions.
+    #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
+    diff: Vec<String>,
+
+    /// Count only files known to git.
+    #[flag(long = "tracked")]
+    tracked: bool,
+
+    /// Include paths matching this glob. May be repeated.
+    #[option(long = "include")]
+    include: Vec<String>,
+
+    /// Exclude paths matching this glob. May be repeated.
+    #[option(long = "exclude")]
+    exclude: Vec<String>,
+
+    /// Path to tally
+    #[positional(default = ".")]
+    path: PathBuf,
+}
+
+#[cfg(feature = "debug")]
 #[argue::args]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DebugLevel {
@@ -112,7 +184,7 @@ enum DebugLevel {
 
 fn main() {
     if let Err(error) = run() {
-        #[cfg(feature = "trace")]
+        #[cfg(feature = "debug")]
         if trace::enabled() {
             trace_event!(
                 "run_error",
@@ -131,7 +203,7 @@ fn main() {
 
 fn run() -> io::Result<()> {
     run_inner()?;
-    #[cfg(feature = "trace")]
+    #[cfg(feature = "debug")]
     if trace::enabled() {
         let path = trace::finish()?;
         eprintln!("Trace appended to {}", path.display());
@@ -141,41 +213,27 @@ fn run() -> io::Result<()> {
 
 fn run_inner() -> io::Result<()> {
     let args = parse_args();
+    let extended = tally_stats::parse(&args.extended)
+        .map_err(|error| io::Error::new(ErrorKind::InvalidInput, error))?;
     if args.version {
         update::check()?;
         return Ok(());
     }
 
-    let max_debug = args.debug == DebugLevel::Max;
-    #[cfg(not(feature = "trace"))]
-    if max_debug {
-        return Err(io::Error::new(
-            ErrorKind::Unsupported,
-            "--debug=max requires a build with --features trace",
-        ));
-    }
     let metadata = if args.path == Path::new("-") {
         None
     } else {
         Some(std::fs::metadata(&args.path)?)
     };
-    let is_trace_file = if metadata.as_ref().is_some_and(std::fs::Metadata::is_file) {
-        match std::fs::symlink_metadata(".tallydebug") {
-            Ok(_) => trace_output::TraceOutput::current()?.matches_file(&args.path),
-            Err(error) if error.kind() == ErrorKind::NotFound => false,
-            Err(_) => trace_output::TraceOutput::current()?.matches_file(&args.path),
-        }
-    } else {
-        false
-    };
-    if is_trace_file {
+    let trace_output = trace_output::TraceOutput::current()?;
+    if trace_output.matches_file(&args.path) {
         return Err(io::Error::new(
             ErrorKind::InvalidInput,
             format!("{} is tally's trace output", args.path.display()),
         ));
     }
-    #[cfg(feature = "trace")]
-    if max_debug {
+    #[cfg(feature = "debug")]
+    if args.debug == DebugLevel::Max {
         trace::start()?;
     }
     trace_event!(
@@ -185,7 +243,7 @@ fn run_inner() -> io::Result<()> {
     );
 
     if args.path == Path::new("-") {
-        return count_stdin(&args);
+        return count_stdin(&args, &extended);
     }
 
     let metadata = metadata.unwrap();
@@ -203,7 +261,10 @@ fn run_inner() -> io::Result<()> {
     };
     let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
     let adaptive_threads = args.threads.is_none() && path_is_dir;
+    #[cfg(feature = "debug")]
     let debug = args.debug != DebugLevel::Off;
+    #[cfg(not(feature = "debug"))]
+    let debug = false;
     let override_root = if path_is_dir {
         args.path.as_path()
     } else {
@@ -215,6 +276,12 @@ fn run_inner() -> io::Result<()> {
     let canonical_root = override_root.canonicalize()?;
     let overrides = build_overrides(&canonical_root, &args.include, &args.exclude)?;
     if let Some(reference) = args.diff.first() {
+        if !extended.is_empty() {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "-x cannot be used with --diff",
+            ));
+        }
         if args.diff.len() > 2 {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,
@@ -231,19 +298,21 @@ fn run_inner() -> io::Result<()> {
             adaptive_threads,
         );
     }
-    let sink = file::Sink::new();
+    let sink = file::Sink::new_with_samples(!extended.is_empty());
     let progress = std::io::stderr().is_terminal().then(|| {
         let (progress_done, done) = mpsc::channel();
         (progress_done, show_progress(Arc::clone(&sink), done))
     });
 
+    #[cfg(feature = "debug")]
     let timer = debug.then(debug::Timer::start);
+    #[cfg(feature = "debug")]
     let mut scan = None;
     if path_is_dir && args.tracked {
         let files = git_files(&args.path)?;
         parse_file_list(files, &args.path, &overrides, &sink, debug)?;
     } else if path_is_dir {
-        scan = Some(scan_directory(
+        let report = scan_directory(
             &canonical_root,
             Arc::clone(&sink),
             !args.all,
@@ -251,7 +320,15 @@ fn run_inner() -> io::Result<()> {
             adaptive_threads,
             debug,
             overrides,
-        )?);
+        )?;
+        #[cfg(feature = "debug")]
+        {
+            scan = Some(report);
+        }
+        #[cfg(not(feature = "debug"))]
+        {
+            let _ = report;
+        }
     } else if !args.tracked
         || git_files(override_root)?.iter().any(|path| {
             path == &override_root.join(args.path.strip_prefix(override_root).unwrap_or(&args.path))
@@ -264,6 +341,7 @@ fn run_inner() -> io::Result<()> {
             parse_single_opened_file(&args.path, opened_file.unwrap(), &sink, debug)?;
         }
     }
+    #[cfg(feature = "debug")]
     let timing = timer.map(debug::Timer::finish);
     trace_event!("scan_complete", Some(&args.path), serde_json::json!({}));
 
@@ -281,11 +359,12 @@ fn run_inner() -> io::Result<()> {
     {
         let _span = trace_span!("output", None);
         if args.json {
-            output::print_json(&summary)?;
+            output::print_json(&summary, &extended)?;
         } else {
-            output::print_summary(&summary, std::io::stdout().is_terminal())?;
+            output::print_summary(&summary, std::io::stdout().is_terminal(), &extended)?;
         }
 
+        #[cfg(feature = "debug")]
         if let Some(timing) = timing {
             debug::print(timing, scan, &summary)?;
             output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
@@ -346,7 +425,7 @@ fn file_is_included(overrides: &Override, relative_path: &Path) -> bool {
         })
 }
 
-fn count_stdin(args: &Args) -> io::Result<()> {
+fn count_stdin(args: &Args, extended: &[tally_stats::Kind]) -> io::Result<()> {
     if args.tracked || !args.diff.is_empty() || !args.include.is_empty() || !args.exclude.is_empty()
     {
         return Err(io::Error::new(
@@ -354,17 +433,21 @@ fn count_stdin(args: &Args) -> io::Result<()> {
             "git and path filters cannot be used with stdin",
         ));
     }
-    let sink = file::Sink::new();
-    let mut batch = Batch::default();
-    if let Some(stats) = file::parse_stdin(args.debug != DebugLevel::Off)? {
+    let sink = file::Sink::new_with_samples(!extended.is_empty());
+    let mut batch = Batch::with_samples(!extended.is_empty());
+    #[cfg(feature = "debug")]
+    let debug = args.debug != DebugLevel::Off;
+    #[cfg(not(feature = "debug"))]
+    let debug = false;
+    if let Some(stats) = file::parse_stdin(debug)? {
         batch.add(stats);
     }
     sink.add_batch(&mut batch);
     let summary = sink.snapshot();
     if args.json {
-        output::print_json(&summary)
+        output::print_json(&summary, extended)
     } else {
-        output::print_summary(&summary, std::io::stdout().is_terminal())
+        output::print_summary(&summary, std::io::stdout().is_terminal(), extended)
     }
 }
 
@@ -388,6 +471,12 @@ fn parse_args() -> Args {
     // Join space-separated revisions without touching other option values or `--`.
     let mut position = 1;
     while position < argv.len() {
+        if let Some(value) = argv[position]
+            .to_str()
+            .and_then(|arg| arg.strip_prefix("-x="))
+        {
+            argv[position] = format!("--extended={value}").into();
+        }
         match argv[position].to_str() {
             Some("--") => break,
             Some("-j" | "--threads" | "--include" | "--exclude") => position += 2,
@@ -425,9 +514,9 @@ fn default_threads(path_is_dir: bool) -> usize {
 }
 
 fn parse_single_file(path: &Path, sink: &file::Sink, debug: bool) -> io::Result<()> {
-    #[cfg(feature = "trace")]
+    #[cfg(feature = "debug")]
     let _file_context = trace::file_context(path);
-    let mut batch = Batch::default();
+    let mut batch = Batch::with_samples(sink.collects_samples());
     if let Some(file_stats) = parse_file(path, debug)? {
         batch.add(file_stats);
     }
@@ -442,9 +531,9 @@ fn parse_single_opened_file(
     sink: &file::Sink,
     debug: bool,
 ) -> io::Result<()> {
-    #[cfg(feature = "trace")]
+    #[cfg(feature = "debug")]
     let _file_context = trace::file_context(path);
-    let mut batch = Batch::default();
+    let mut batch = Batch::with_samples(sink.collects_samples());
     if let Some(file_stats) = file::parse_opened_file(path, opened_file, debug)? {
         batch.add(file_stats);
     }
@@ -501,6 +590,7 @@ mod tests {
         let args = Args::parse_from(["tally"]).unwrap();
 
         assert!(!args.all);
+        #[cfg(feature = "debug")]
         assert_eq!(args.debug, DebugLevel::Off);
         assert!(!args.json);
         assert!(!args.version);
@@ -528,6 +618,7 @@ mod tests {
         assert_eq!(args.exclude, ["tests/**", "*.ts"]);
     }
 
+    #[cfg(feature = "debug")]
     #[test]
     fn args_parse_flags_options_and_path() {
         let args = Args::parse_from(["tally", "--all", "--json", "-d", "-j", "2", "src"]).unwrap();

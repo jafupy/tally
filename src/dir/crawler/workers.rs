@@ -8,12 +8,14 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(feature = "debug")]
+use std::time::Instant;
 
 fn new_scanner(sink: Arc<file::Sink>, failed: Arc<AtomicBool>, debug: bool) -> ScanWorker {
     ScanWorker {
+        batch: Batch::with_samples(sink.collects_samples()),
         sink,
-        batch: Batch::default(),
         debug,
         failed,
         buffer: file::read_buffer(),
@@ -24,7 +26,7 @@ fn count_batch(
     scanner: &mut ScanWorker,
     shared: &Shared,
     paths: Vec<PathBuf>,
-    counting_time: &mut Duration,
+    #[cfg(feature = "debug")] counting_time: &mut Duration,
 ) {
     let _span = trace_span!("count_batch", None);
     trace_event!(
@@ -32,12 +34,14 @@ fn count_batch(
         None,
         serde_json::json!({"files": paths.len()})
     );
+    #[cfg(feature = "debug")]
     let started = shared.metrics.as_ref().map(|_| Instant::now());
     let count = paths.len();
     for path in paths {
         scanner.visit_path(&path);
     }
     shared.pending_files.fetch_sub(count, Ordering::AcqRel);
+    #[cfg(feature = "debug")]
     if let Some(started) = started {
         *counting_time += started.elapsed();
     }
@@ -56,8 +60,11 @@ pub(super) fn run_single(
     let _span = trace_span!("worker_lifetime", None);
     trace_event!("worker_start", None, serde_json::json!({}));
     let mut scanner = new_scanner(sink, Arc::clone(&failed), debug);
+    #[cfg(feature = "debug")]
     let mut counting_time = Duration::ZERO;
+    #[cfg(feature = "debug")]
     let mut listing_time = Duration::ZERO;
+    #[cfg(feature = "debug")]
     let mut idle_yields = 0;
     while !shared.done() {
         let mut worked = false;
@@ -67,7 +74,13 @@ pub(super) fn run_single(
                 None,
                 serde_json::json!({"files": paths.len(), "ring_depth": shared.files.len()})
             );
-            count_batch(&mut scanner, shared, paths, &mut counting_time);
+            count_batch(
+                &mut scanner,
+                shared,
+                paths,
+                #[cfg(feature = "debug")]
+                &mut counting_time,
+            );
             worked = true;
         }
         if let Some(job) = shared.directories.pop() {
@@ -76,8 +89,10 @@ pub(super) fn run_single(
                 Some(&job.path),
                 serde_json::json!({"ring_depth": shared.directories.len()})
             );
+            #[cfg(feature = "debug")]
             let started = shared.metrics.as_ref().map(|_| Instant::now());
             list_directory(job, shared, batch_size, &global, ignore_git, &failed);
+            #[cfg(feature = "debug")]
             if let Some(started) = started {
                 listing_time += started.elapsed();
             }
@@ -89,7 +104,13 @@ pub(super) fn run_single(
                 None,
                 serde_json::json!({"files": paths.len(), "ring_depth": shared.files.len()})
             );
-            count_batch(&mut scanner, shared, paths, &mut counting_time);
+            count_batch(
+                &mut scanner,
+                shared,
+                paths,
+                #[cfg(feature = "debug")]
+                &mut counting_time,
+            );
             worked = true;
         }
         if !worked {
@@ -98,12 +119,14 @@ pub(super) fn run_single(
                 None,
                 serde_json::json!({"directories_pending": shared.pending_directories.load(Ordering::Relaxed), "files_pending": shared.pending_files.load(Ordering::Relaxed)})
             );
+            #[cfg(feature = "debug")]
             if shared.metrics.is_some() {
                 idle_yields += 1;
             }
             thread::yield_now();
         }
     }
+    #[cfg(feature = "debug")]
     if let Some(metrics) = &shared.metrics {
         metrics
             .counting_nanos
@@ -115,6 +138,7 @@ pub(super) fn run_single(
             .idle_yields
             .fetch_add(idle_yields, Ordering::Relaxed);
     }
+    #[cfg(feature = "debug")]
     trace_event!(
         "worker_exit",
         None,

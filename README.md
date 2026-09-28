@@ -15,12 +15,33 @@ Total       16 2,407   403       6 1,998
 ```
 
 Use `tally --json .` to emit the same results as structured JSON.
+Use `tally -x .` to add per-file minimum, maximum, median, and standard
+deviation columns beside Blank, Comment, and Code for each language and the
+whole scan.
+Select individual statistics with `-x=median`, `-x=sd`, `-x=iqr`,
+`-x=variance`, or a percentile such as `-x=p95`. Repeat `-x=...` to combine
+them. Percentiles use linear interpolation; IQR is p75 minus p25. Standard
+deviation and variance use the full population of counted files.
+
+Custom formulas use `-x='NAME=EXPR'` and add a column for each of Blank,
+Comment, and Code. The expression runs on that metric's per-file values. For
+example, `-x='med=p(50)'` recreates median and
+`-x='avg=sum()/count()'` recreates mean. Available functions are `p(N)`
+(percentile), `sum()`, `count()`, `sumsq(CENTER)` (sum of squared distances
+from CENTER, which defaults to 0), and `sqrt(EXPR)`. Arithmetic supports
+`+`, `-`, `*`, `/`, `^`, and parentheses. For example,
+`-x='var=sumsq(sum()/count())/count()'` recreates population variance.
+Similarly, `p(0)` and `p(100)` recreate min and max; `p(75)-p(25)` recreates
+IQR; and `sqrt(sumsq(sum()/count())/count())` recreates SD.
+Formula names must be unique; division by zero and other undefined results
+appear as `-` in tables and `null` in JSON.
+
+Build with `cargo build --release --features debug` to enable diagnostics.
 Use `tally --debug .` to print scan timing, CPU usage, worker and queue activity,
 and unknown file formats to stderr. It can be combined with `--json`.
 
-For a detailed timestamped JSONL trace, build with `cargo build --release --features trace`
-and run `tally --debug=max .`. This appends to `.tallydebug` in the current
-directory. It records per-file and per-line activity, so traces of large trees
+For a detailed timestamped JSONL trace, run `tally --debug=max .`. This
+appends to `.tallydebug` in the current directory. It records per-file and per-line activity, so traces of large trees
 can be very large. `clock_count` is a monotonic clock tick count (not CPU cycles).
 Tally excludes this trace file from directory scans and rejects it as an explicit input.
 

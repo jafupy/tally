@@ -1,5 +1,6 @@
 // Prototype: own directory crawler and growable MPMC job queues. The ignore
 // crate is used only to parse and match ignore patterns, never to walk.
+#[cfg(feature = "debug")]
 mod metrics;
 mod rules;
 mod workers;
@@ -10,8 +11,12 @@ use crate::trace_output::TraceOutput;
 use crossbeam_queue::SegQueue;
 use ignore::gitignore::Gitignore;
 use ignore::overrides::Override;
+#[cfg(feature = "debug")]
 use metrics::Counters;
+#[cfg(feature = "debug")]
 pub(crate) use metrics::ScanReport;
+#[cfg(not(feature = "debug"))]
+pub(crate) type ScanReport = ();
 use rules::{Rules, extend_rules};
 use std::fs;
 use std::io;
@@ -34,6 +39,7 @@ struct Shared {
     files: SegQueue<Vec<PathBuf>>,
     pending_directories: AtomicUsize,
     pending_files: AtomicUsize,
+    #[cfg(feature = "debug")]
     metrics: Option<Counters>,
 }
 
@@ -42,6 +48,7 @@ impl Shared {
         trace_event!("directory_enqueue", Some(&job.path), serde_json::json!({}));
         self.pending_directories.fetch_add(1, Ordering::AcqRel);
         self.directories.push(job);
+        #[cfg(feature = "debug")]
         if let Some(metrics) = &self.metrics {
             metrics
                 .peak_directory_queue
@@ -50,7 +57,7 @@ impl Shared {
     }
 
     fn push_files(&self, paths: Vec<PathBuf>) {
-        #[cfg(feature = "trace")]
+        #[cfg(feature = "debug")]
         if crate::trace::enabled() {
             for path in &paths {
                 trace_event!("file_enqueue", Some(path), serde_json::json!({}));
@@ -62,6 +69,7 @@ impl Shared {
             serde_json::json!({"files": paths.len()})
         );
         self.pending_files.fetch_add(paths.len(), Ordering::AcqRel);
+        #[cfg(feature = "debug")]
         if let Some(metrics) = &self.metrics {
             metrics
                 .files_queued
@@ -69,6 +77,7 @@ impl Shared {
             metrics.file_batches.fetch_add(1, Ordering::Relaxed);
         }
         self.files.push(paths);
+        #[cfg(feature = "debug")]
         if let Some(metrics) = &self.metrics {
             metrics
                 .peak_file_queue
@@ -106,6 +115,7 @@ fn list_directory(
             return;
         }
     };
+    #[cfg(feature = "debug")]
     if let Some(metrics) = &shared.metrics {
         metrics.directories_listed.fetch_add(1, Ordering::Relaxed);
     }
@@ -251,6 +261,7 @@ pub(super) fn scan(
         files: SegQueue::new(),
         pending_directories: AtomicUsize::new(1),
         pending_files: AtomicUsize::new(0),
+        #[cfg(feature = "debug")]
         metrics: debug.then(Counters::new),
     });
     trace_event!("root_queued", Some(&root), serde_json::json!({}));
@@ -293,12 +304,17 @@ pub(super) fn scan(
         )
     };
     scan_result(failed.load(Ordering::Relaxed))?;
-    Ok(shared.metrics.as_ref().map_or(
+    #[cfg(not(feature = "debug"))]
+    let _ = workers;
+    #[cfg(feature = "debug")]
+    return Ok(shared.metrics.as_ref().map_or(
         ScanReport {
             workers,
             worker_limit: max_workers,
             ..ScanReport::default()
         },
         |metrics| metrics.snapshot(workers, max_workers),
-    ))
+    ));
+    #[cfg(not(feature = "debug"))]
+    Ok(())
 }

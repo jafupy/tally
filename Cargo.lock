@@ -1142,6 +1142,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tally-git",
+ "tally-stats",
  "toml",
 ]
 
@@ -1153,6 +1154,13 @@ dependencies = [
  "gix-index",
  "gix-object",
  "gix-odb",
+]
+
+[[package]]
+name = "tally-stats"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
