@@ -1,5 +1,5 @@
 use super::{ExtendedStats, summary_rows};
-use crate::file::{Stats, Summary};
+use crate::result::{Stats, Summary};
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 use tally_stats::{Kind, Values};
@@ -68,9 +68,9 @@ fn with_extended(stats: Stats, values: &[(Kind, Values)], kinds: &[Kind]) -> Jso
     json
 }
 
-pub fn print_json(summary: &Summary, kinds: &[Kind]) -> io::Result<()> {
+pub fn write_json(output: &mut impl Write, summary: &Summary, kinds: &[Kind]) -> io::Result<()> {
     writeln!(
-        io::stdout().lock(),
+        output,
         "{}",
         serde_json::to_string_pretty(&json_summary(summary, kinds))
             .expect("summary should serialize")

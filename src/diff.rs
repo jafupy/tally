@@ -1,4 +1,4 @@
-use crate::{file, language, output};
+use crate::{file, language, output, result};
 use ignore::overrides::Override;
 use imara_diff::{Algorithm, Diff, InternedInput};
 use std::{
@@ -16,11 +16,11 @@ use std::{
 
 #[derive(Clone, Copy, Default, serde::Serialize)]
 struct Changes {
-    added: file::Stats,
-    deleted: file::Stats,
+    added: result::Stats,
+    deleted: result::Stats,
 }
 
-type FileCounts = [Option<(&'static str, file::Stats)>; 2];
+type FileCounts = [Option<(&'static str, result::Stats)>; 2];
 
 pub fn count(
     root: &Path,
@@ -40,7 +40,8 @@ pub fn count(
     let trace_output = crate::trace_output::TraceOutput::current()?;
     let repo = tally_git::Repository::open(root)?;
     let files = repo.files(reference, target, |path| {
-        !trace_output.matches_file(&root.join(path)) && crate::file_is_included(overrides, path)
+        !trace_output.matches_file(&root.join(path))
+            && crate::scan::file_is_included(overrides, path)
     })?;
     let changes = count_files(root, &repo, files, threads, adaptive_threads)?;
     let mut languages = HashMap::<&'static str, Changes>::new();
@@ -196,7 +197,7 @@ fn selected_stats(
     path: &Path,
     contents: &[u8],
     lines: &HashSet<usize>,
-) -> Option<(&'static str, file::Stats)> {
+) -> Option<(&'static str, result::Stats)> {
     if lines.is_empty() {
         return None;
     }

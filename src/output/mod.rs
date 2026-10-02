@@ -1,14 +1,14 @@
 mod json;
 mod table;
 
-use crate::file::{Stats, Summary};
+use crate::result::{Stats, Summary};
 use std::collections::HashMap;
 use tally_stats::{Kind, Sample, Values};
 
-pub use json::print_json;
+pub use json::write_json;
 #[cfg(feature = "debug")]
-pub use table::print_unknown_formats;
-pub use table::{format_number, print_summary};
+pub use table::write_unknown_formats;
+pub use table::{format_number, write_summary};
 
 pub(crate) const DIM_STYLE: &str = "\x1b[2m";
 

@@ -54,17 +54,18 @@ impl Rules {
 fn matcher(path: &Path, failed: &AtomicBool) -> Gitignore {
     let _span = trace_span!("load_ignore_rules", Some(path));
     if !path.is_file() {
-        trace_event!("ignore_rules_absent", Some(path), serde_json::json!({}));
+        trace_event!(ignore_rules_absent, Some(path));
         return Gitignore::empty();
     }
     let (matcher, error) = Gitignore::new(path);
     trace_event!(
-        "ignore_rules_loaded",
+        ignore_rules_loaded,
         Some(path),
-        serde_json::json!({"patterns": matcher.len(), "error": error.is_some()})
+        matcher.len(),
+        error.is_some()
     );
     if let Some(error) = error {
-        if crate::dir::report_walk_error(&error) {
+        if crate::scan::report_walk_error(&error) {
             failed.store(true, Ordering::Relaxed);
         }
     }
@@ -109,19 +110,19 @@ fn exclude_matcher(dir: &Path, failed: &AtomicBool) -> Gitignore {
     let path = git_dir.join("info/exclude");
     let _span = trace_span!("load_exclude_rules", Some(&path));
     if !path.is_file() {
-        trace_event!("exclude_rules_absent", Some(&path), serde_json::json!({}));
+        trace_event!(exclude_rules_absent, Some(&path));
         return Gitignore::empty();
     }
     let mut builder = GitignoreBuilder::new(dir);
     if let Some(error) = builder.add(&path) {
-        if crate::dir::report_walk_error(&error) {
+        if crate::scan::report_walk_error(&error) {
             failed.store(true, Ordering::Relaxed);
         }
     }
     match builder.build() {
         Ok(matcher) => matcher,
         Err(error) => {
-            if crate::dir::report_walk_error(&error) {
+            if crate::scan::report_walk_error(&error) {
                 failed.store(true, Ordering::Relaxed);
             }
             Gitignore::empty()
@@ -149,13 +150,15 @@ pub(super) fn extend_rules(
         Gitignore::empty()
     };
     if !git_root && ignore.is_empty() && gitignore.is_empty() && exclude.is_empty() {
-        trace_event!("rules_inherited", Some(dir), serde_json::json!({}));
+        trace_event!(rules_inherited, Some(dir));
         return parent;
     }
     trace_event!(
-        "rules_extended",
+        rules_extended,
         Some(dir),
-        serde_json::json!({"ignore": ignore.len(), "gitignore": gitignore.len(), "exclude": exclude.len()})
+        ignore.len(),
+        gitignore.len(),
+        exclude.len()
     );
     Some(Arc::new(Rules {
         parent,
