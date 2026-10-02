@@ -31,8 +31,7 @@ pub struct Batch {
     pub(super) all: Stats,
     pub(super) unknown: Stats,
     pub(super) per_language: LanguageMap,
-    #[cfg(feature = "debug")]
-    pub(super) unknown_formats: HashMap<String, u64>,
+    pub(super) unknown_formats: crate::debug::UnknownFormats,
     pub(super) samples: Vec<(Option<LanguageId>, Stats)>,
 }
 
@@ -45,16 +44,7 @@ impl Batch {
     }
 
     pub fn add(&mut self, file_stats: FileStats) {
-        #[cfg(feature = "debug")]
-        let (lines, known) = match &file_stats {
-            FileStats::Known { stats, .. } => (stats.lines, true),
-            FileStats::Unknown { stats, .. } => (stats.lines, false),
-        };
-        trace_event!(
-            "batch_add_file",
-            None,
-            serde_json::json!({"lines": lines, "known": known})
-        );
+        trace_event!(batch_add_file, None, &file_stats);
         match file_stats {
             FileStats::Known { language_id, stats } => {
                 if self.collect_samples {
@@ -69,12 +59,7 @@ impl Batch {
                 }
                 self.all += stats;
                 self.unknown += stats;
-                #[cfg(not(feature = "debug"))]
-                let _ = format;
-                #[cfg(feature = "debug")]
-                if let Some(format) = format {
-                    *self.unknown_formats.entry(format).or_default() += 1;
-                }
+                self.unknown_formats.record(format);
             }
         }
     }
@@ -86,7 +71,6 @@ impl Batch {
     pub(super) fn clear(&mut self) {
         self.all = Stats::default();
         self.unknown = Stats::default();
-        #[cfg(feature = "debug")]
         self.unknown_formats.clear();
     }
 }

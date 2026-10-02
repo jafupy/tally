@@ -61,8 +61,7 @@ fn parse_file_buffered_inner(
     buffer: &mut [u8],
     opened_file: Option<File>,
 ) -> io::Result<Option<FileStats>> {
-    #[cfg(feature = "debug")]
-    let _file_context = crate::trace::file_context(path);
+    let _file_context = trace_context!(path);
     let _file_span = trace_span!("parse_file", Some(path));
     let file = {
         let _open_span = trace_span!("file_open", Some(path));
@@ -71,23 +70,15 @@ fn parse_file_buffered_inner(
             None => File::open(path)?,
         }
     };
-    trace_event!("file_opened", Some(path), serde_json::json!({}));
+    trace_event!(file_opened, Some(path));
     let mut reader = ReusableBufReader::new(file, buffer);
 
     let language_id = {
         let _prefix_span = trace_span!("read_prefix", Some(path));
         let prefix = read_prefix(&mut reader)?;
-        trace_event!(
-            "prefix_read",
-            Some(path),
-            serde_json::json!({"bytes": prefix.len()})
-        );
+        trace_event!(prefix_read, Some(path), prefix.len());
         let Some(contents_prefix) = text_prefix(prefix) else {
-            trace_event!(
-                "file_skip",
-                Some(path),
-                serde_json::json!({"reason": "binary"})
-            );
+            trace_event!(file_skip, Some(path), "binary");
             return Ok(None);
         };
         let _detect_span = trace_span!("detect_language", Some(path));
@@ -97,36 +88,18 @@ fn parse_file_buffered_inner(
     match language_id {
         Some(language_id) => {
             let language = language::get(language_id);
-            trace_event!(
-                "language_detected",
-                Some(path),
-                serde_json::json!({"language": language.name})
-            );
+            trace_event!(language_detected, Some(path), language.name);
             let _count_span = trace_span!("count_lines", Some(path));
             let stats = count_lines(reader, language)?;
-            trace_event!(
-                "file_counted",
-                Some(path),
-                serde_json::json!({"lines": stats.lines, "code": stats.code, "comments": stats.comments, "blanks": stats.blanks})
-            );
+            trace_event!(file_counted, Some(path), &stats);
             Ok(Some(FileStats::Known { language_id, stats }))
         }
         None => {
-            trace_event!("language_unknown", Some(path), serde_json::json!({}));
+            trace_event!(language_unknown, Some(path));
             let _count_span = trace_span!("count_lines", Some(path));
             let stats = count_lines(reader, &UNKNOWN)?;
-            #[cfg(feature = "debug")]
-            let format = debug.then(|| unknown_format(path)).flatten();
-            #[cfg(not(feature = "debug"))]
-            let format = {
-                let _ = debug;
-                None
-            };
-            trace_event!(
-                "file_counted",
-                Some(path),
-                serde_json::json!({"lines": stats.lines, "code": stats.code, "comments": stats.comments, "blanks": stats.blanks, "unknown_format": format})
-            );
+            let format = crate::debug::unknown_format(path, debug);
+            trace_event!(unknown_file_counted, Some(path), &stats, &format);
             Ok(Some(FileStats::Unknown { format, stats }))
         }
     }
@@ -161,13 +134,7 @@ fn parse_reader(
         }
         None => {
             let stats = count_lines(reader, &UNKNOWN)?;
-            #[cfg(feature = "debug")]
-            let format = verbose.then(|| unknown_format(path)).flatten();
-            #[cfg(not(feature = "debug"))]
-            let format = {
-                let _ = verbose;
-                None
-            };
+            let format = crate::debug::unknown_format(path, verbose);
             Ok(Some(FileStats::Unknown { format, stats }))
         }
     }
@@ -185,17 +152,6 @@ fn text_prefix(prefix: &[u8]) -> Option<&str> {
         }
         Err(_) => None,
     }
-}
-
-#[cfg(feature = "debug")]
-fn unknown_format(path: &Path) -> Option<String> {
-    if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
-        return Some(format!(".{extension}"));
-    }
-
-    path.file_name()
-        .and_then(|filename| filename.to_str())
-        .map(|filename| filename.to_owned())
 }
 
 pub fn read_buffer() -> Vec<u8> {

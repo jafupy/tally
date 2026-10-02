@@ -1,7 +1,5 @@
 use super::{Batch, Stats, Summary};
 use crate::language::{self, LanguageId};
-#[cfg(feature = "debug")]
-use std::collections::HashMap;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicU64, Ordering},
@@ -18,8 +16,7 @@ struct SinkInner {
     all: Stats,
     unknown: Stats,
     per_language: Vec<Stats>,
-    #[cfg(feature = "debug")]
-    unknown_formats: HashMap<String, u64>,
+    unknown_formats: crate::debug::UnknownFormats,
     samples: Vec<(Option<LanguageId>, Stats)>,
 }
 
@@ -46,7 +43,7 @@ impl Sink {
 
     pub fn record_progress(&self, files: u64) {
         self.files.fetch_add(files, Ordering::Relaxed);
-        trace_event!("progress_update", None, serde_json::json!({"files": files}));
+        trace_event!(progress_update, None, files);
     }
 
     pub fn add_batch(&self, batch: &mut Batch) {
@@ -55,11 +52,7 @@ impl Sink {
         }
 
         let _span = trace_span!("sink_merge_batch", None);
-        trace_event!(
-            "sink_batch",
-            None,
-            serde_json::json!({"files": batch.all.files, "lines": batch.all.lines})
-        );
+        trace_event!(sink_batch, None, batch.all.files, batch.all.lines);
         let mut sink = self.inner.lock().unwrap();
         sink.all += batch.all;
         sink.unknown += batch.unknown;
@@ -68,10 +61,7 @@ impl Sink {
             sink.per_language[language_id.0] += stats;
         }
 
-        #[cfg(feature = "debug")]
-        for (format, files) in batch.unknown_formats.drain() {
-            *sink.unknown_formats.entry(format).or_default() += files;
-        }
+        sink.unknown_formats.merge(&mut batch.unknown_formats);
 
         sink.samples.append(&mut batch.samples);
 
@@ -94,24 +84,13 @@ impl Sink {
 
         languages.sort_by_key(|&(language_id, _)| language_id.0);
 
-        #[cfg(feature = "debug")]
-        let mut unknown_formats = sink
-            .unknown_formats
-            .iter()
-            .map(|(format, &files)| (format.clone(), files))
-            .collect::<Vec<_>>();
-        #[cfg(feature = "debug")]
-        unknown_formats.sort_by(|(left_format, left_files), (right_format, right_files)| {
-            right_files
-                .cmp(left_files)
-                .then_with(|| left_format.cmp(right_format))
-        });
+        let _unknown_formats = sink.unknown_formats.snapshot();
 
         Summary {
             all: sink.all,
             unknown: sink.unknown,
             #[cfg(feature = "debug")]
-            unknown_formats,
+            unknown_formats: _unknown_formats,
             languages,
             samples: sink.samples.clone(),
         }

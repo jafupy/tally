@@ -1,150 +1,105 @@
-use crate::result::Summary;
-use crate::scan::ScanReport;
-use std::io::{self, Write};
-use std::time::{Duration, Instant};
+mod formats;
+pub(crate) use formats::UnknownFormats;
+#[cfg(feature = "debug")]
+mod report;
 
-#[derive(Clone, Copy)]
-struct CpuTime {
-    user: Duration,
-    system: Duration,
-}
+use crate::{cli::Args, result::Summary, scan::ScanReport};
+use std::{io, path::Path};
 
-pub struct Timer {
-    start: Instant,
-    cpu_start: Option<CpuTime>,
-}
-
-pub struct Timing {
-    wall: Duration,
-    cpu: Option<CpuTime>,
-}
-
-impl Timer {
-    pub fn start() -> Self {
-        Self {
-            start: Instant::now(),
-            cpu_start: cpu_time(),
-        }
+pub(crate) fn start(args: &Args) -> io::Result<()> {
+    #[cfg(feature = "debug")]
+    if args.trace_requested() {
+        crate::trace::start()?;
     }
-
-    pub fn finish(self) -> Timing {
-        Timing {
-            wall: self.start.elapsed(),
-            cpu: self.cpu_start.zip(cpu_time()).map(|(start, end)| CpuTime {
-                user: end.user.saturating_sub(start.user),
-                system: end.system.saturating_sub(start.system),
-            }),
-        }
-    }
-}
-
-pub fn print(timing: Timing, scan: Option<ScanReport>, summary: &Summary) -> io::Result<()> {
-    let mut error = io::stderr().lock();
-    writeln!(error, "\nDebug scan:")?;
-    writeln!(
-        error,
-        "  Wall time:             {:.3} ms",
-        timing.wall.as_secs_f64() * 1e3
-    )?;
-    if let Some(cpu) = timing.cpu {
-        let total = cpu.user + cpu.system;
-        let cores = total.as_secs_f64() / timing.wall.as_secs_f64();
-        writeln!(
-            error,
-            "  User CPU:              {:.3} ms",
-            cpu.user.as_secs_f64() * 1e3
-        )?;
-        writeln!(
-            error,
-            "  System CPU:            {:.3} ms",
-            cpu.system.as_secs_f64() * 1e3
-        )?;
-        writeln!(
-            error,
-            "  Total CPU:             {:.3} ms",
-            total.as_secs_f64() * 1e3
-        )?;
-        writeln!(
-            error,
-            "  CPU / wall:            {:.1}% ({cores:.2} core equivalents)",
-            cores * 100.0
-        )?;
-    } else {
-        writeln!(error, "  CPU time:              unavailable")?;
-    }
-    let available = std::thread::available_parallelism().map_or(1, usize::from);
-    writeln!(error, "  Logical CPUs available: {available}")?;
-    if let Some(scan) = scan {
-        writeln!(
-            error,
-            "  Workers started:       {} / {} limit",
-            scan.workers, scan.worker_limit
-        )?;
-        writeln!(
-            error,
-            "  Directories listed:    {}",
-            scan.directories_listed
-        )?;
-        writeln!(
-            error,
-            "  Files queued:          {} in {} batches",
-            scan.files_queued, scan.file_batches
-        )?;
-        writeln!(
-            error,
-            "  Observed dir peak (jobs): {}",
-            scan.peak_directory_queue
-        )?;
-        writeln!(
-            error,
-            "  Observed file peak (batches): {}",
-            scan.peak_file_queue
-        )?;
-        writeln!(
-            error,
-            "  Queue overflows:       {} dirs, {} file batches",
-            scan.directory_spills, scan.file_spills
-        )?;
-        writeln!(
-            error,
-            "  Counting worker time:  {:.3} ms",
-            scan.counting_time.as_secs_f64() * 1e3
-        )?;
-        writeln!(
-            error,
-            "  Listing worker time:   {:.3} ms",
-            scan.listing_time.as_secs_f64() * 1e3
-        )?;
-        writeln!(error, "  Idle worker yields:    {}", scan.idle_yields)?;
-        writeln!(
-            error,
-            "  Worker times include I/O waits and overlap across threads."
-        )?;
-    } else {
-        writeln!(error, "  Scanner:               main thread")?;
-    }
-    writeln!(error, "  Files counted:         {}", summary.all.files)?;
-    writeln!(error, "  Lines counted:         {}", summary.all.lines)?;
+    trace_event!(
+        run_start,
+        Some(&args.path),
+        args.all,
+        args.json,
+        args.threads
+    );
+    #[cfg(not(feature = "debug"))]
+    let _ = args;
     Ok(())
 }
 
-#[cfg(unix)]
-fn cpu_time() -> Option<CpuTime> {
-    let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
-    if unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) } != 0 {
-        return None;
+pub(crate) fn finish(result: io::Result<()>) -> io::Result<()> {
+    #[cfg(feature = "debug")]
+    if crate::trace::enabled() {
+        return match result {
+            Ok(()) => {
+                let path = crate::trace::finish()?;
+                eprintln!("Trace appended to {}", path.display());
+                Ok(())
+            }
+            Err(error) => {
+                trace_event!(run_error, None, error.to_string());
+                let _ = crate::trace::finish();
+                Err(error)
+            }
+        };
     }
-    let usage = unsafe { usage.assume_init() };
-    let duration = |time: libc::timeval| {
-        Duration::from_secs(time.tv_sec as u64) + Duration::from_micros(time.tv_usec as u64)
-    };
-    Some(CpuTime {
-        user: duration(usage.ru_utime),
-        system: duration(usage.ru_stime),
-    })
+    result
 }
 
-#[cfg(not(unix))]
-fn cpu_time() -> Option<CpuTime> {
+pub(crate) struct ScanTimer {
+    #[cfg(feature = "debug")]
+    timer: Option<report::Timer>,
+}
+
+pub(crate) struct ScanTiming {
+    #[cfg(feature = "debug")]
+    timing: Option<report::Timing>,
+}
+
+impl ScanTimer {
+    pub(crate) fn start(enabled: bool) -> Self {
+        #[cfg(not(feature = "debug"))]
+        let _ = enabled;
+        Self {
+            #[cfg(feature = "debug")]
+            timer: enabled.then(report::Timer::start),
+        }
+    }
+
+    pub(crate) fn finish(self) -> ScanTiming {
+        ScanTiming {
+            #[cfg(feature = "debug")]
+            timing: self.timer.map(report::Timer::finish),
+        }
+    }
+}
+
+impl ScanTiming {
+    pub(crate) fn print(self, scan: Option<ScanReport>, summary: &Summary) -> io::Result<()> {
+        #[cfg(feature = "debug")]
+        if let Some(timing) = self.timing {
+            use std::io::IsTerminal;
+            report::print(timing, scan, summary)?;
+            crate::output::write_unknown_formats(
+                &mut io::stderr().lock(),
+                summary,
+                io::stderr().is_terminal(),
+            )?;
+        }
+        #[cfg(not(feature = "debug"))]
+        let _ = (scan, summary);
+        Ok(())
+    }
+}
+
+pub(crate) fn unknown_format(path: &Path, enabled: bool) -> Option<String> {
+    #[cfg(feature = "debug")]
+    if enabled {
+        if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
+            return Some(format!(".{extension}"));
+        }
+        return path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_owned);
+    }
+    #[cfg(not(feature = "debug"))]
+    let _ = (path, enabled);
     None
 }

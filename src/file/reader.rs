@@ -36,11 +36,7 @@ impl BufRead for ReusableBufReader<'_> {
         if self.position == self.filled {
             let _read_span = trace_span!("file_read", None);
             self.filled = self.file.read(self.buffer)?;
-            trace_event!(
-                "read_chunk",
-                None,
-                serde_json::json!({"bytes": self.filled})
-            );
+            trace_event!(read_chunk, None, self.filled);
             self.position = 0;
         }
         Ok(&self.buffer[self.position..self.filled])

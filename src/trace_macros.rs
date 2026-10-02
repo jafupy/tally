@@ -1,9 +1,9 @@
 #[cfg(feature = "debug")]
 #[macro_export]
 macro_rules! trace_event {
-    ($name:expr, $path:expr, $detail:expr) => {
+    ($name:ident, $path:expr $(, $value:expr)* $(,)?) => {
         if $crate::trace::enabled() {
-            $crate::trace::event($name, $path, $detail);
+            $crate::trace::events::$name($path $(, $value)*);
         }
     };
 }
@@ -26,6 +26,33 @@ macro_rules! trace_span {
 #[macro_export]
 macro_rules! trace_span {
     ($($arg:tt)*) => {
+        ()
+    };
+}
+
+#[cfg(feature = "debug")]
+macro_rules! trace_context {
+    ($path:expr) => {
+        $crate::trace::file_context($path)
+    };
+}
+
+#[cfg(not(feature = "debug"))]
+macro_rules! trace_context {
+    ($path:expr) => {
+        ()
+    };
+}
+
+#[cfg(feature = "debug")]
+macro_rules! trace_value {
+    ($value:expr) => {
+        $value
+    };
+}
+#[cfg(not(feature = "debug"))]
+macro_rules! trace_value {
+    ($value:expr) => {
         ()
     };
 }

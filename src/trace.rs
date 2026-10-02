@@ -1,3 +1,5 @@
+pub(crate) mod events;
+
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::cell::RefCell;

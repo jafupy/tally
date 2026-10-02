@@ -66,8 +66,7 @@ pub(crate) fn file_is_included(overrides: &Override, relative_path: &Path) -> bo
 }
 
 pub(crate) fn parse_single_file(path: &Path, sink: &Sink, debug: bool) -> io::Result<()> {
-    #[cfg(feature = "debug")]
-    let _file_context = crate::trace::file_context(path);
+    let _file_context = trace_context!(path);
     let mut batch = Batch::with_samples(sink.collects_samples());
     if let Some(file_stats) = file::parse_file(path, debug)? {
         batch.add(file_stats);
@@ -83,8 +82,7 @@ pub(crate) fn parse_single_opened_file(
     sink: &Sink,
     debug: bool,
 ) -> io::Result<()> {
-    #[cfg(feature = "debug")]
-    let _file_context = crate::trace::file_context(path);
+    let _file_context = trace_context!(path);
     let mut batch = Batch::with_samples(sink.collects_samples());
     if let Some(file_stats) = file::parse_opened_file(path, opened_file, debug)? {
         batch.add(file_stats);

@@ -1,3 +1,5 @@
+mod path;
+pub(crate) use path::PathScan;
 mod crawler;
 mod selection;
 pub(crate) use selection::{
@@ -82,8 +84,7 @@ struct ScanWorker {
 
 impl ScanWorker {
     fn visit_path(&mut self, path: &Path) {
-        #[cfg(feature = "debug")]
-        let _file_context = crate::trace::file_context(path);
+        let _file_context = trace_context!(path);
         let _span = trace_span!("visit_path", Some(path));
         let result = file::parse_file_buffered(path, self.debug, &mut self.buffer);
         match result {
@@ -94,14 +95,10 @@ impl ScanWorker {
                 }
             }
             Ok(None) => {
-                trace_event!("file_skipped", Some(path), serde_json::json!({}));
+                trace_event!(file_skipped, Some(path));
             }
             Err(error) => {
-                trace_event!(
-                    "file_error",
-                    Some(path),
-                    serde_json::json!({"error": error.to_string()})
-                );
+                trace_event!(file_error, Some(path), error.to_string());
                 if report_file_error(path, &error) {
                     self.failed.store(true, Ordering::Relaxed);
                 }

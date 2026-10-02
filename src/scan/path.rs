@@ -13,7 +13,7 @@ enum Input {
     File(File),
 }
 
-pub(super) struct PathScan {
+pub(crate) struct PathScan {
     input: Input,
     filter_root: PathBuf,
     canonical_root: PathBuf,
@@ -23,7 +23,7 @@ pub(super) struct PathScan {
 }
 
 impl PathScan {
-    pub(super) fn new(args: &Args, metadata: Metadata) -> io::Result<Self> {
+    pub(crate) fn new(args: &Args, metadata: Metadata) -> io::Result<Self> {
         let path_is_dir = metadata.is_dir();
         let input = if path_is_dir {
             Input::Directory
@@ -58,7 +58,7 @@ impl PathScan {
         })
     }
 
-    pub(super) fn diff(self, args: &Args, extended: &[Kind]) -> io::Result<()> {
+    pub(crate) fn diff(self, args: &Args, extended: &[Kind]) -> io::Result<()> {
         if !extended.is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -82,7 +82,7 @@ impl PathScan {
         )
     }
 
-    pub(super) fn count(
+    pub(crate) fn count(
         self,
         args: &Args,
         sink: &Arc<Sink>,

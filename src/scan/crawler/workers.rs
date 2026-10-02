@@ -1,4 +1,4 @@
-use super::{Shared, list_directory};
+use super::{Shared, list_directory, metrics::WorkerStats};
 use crate::scan::ScanWorker;
 use crate::{
     file,
@@ -12,8 +12,6 @@ use std::sync::{
 };
 use std::thread;
 use std::time::Duration;
-#[cfg(feature = "debug")]
-use std::time::Instant;
 
 fn new_scanner(sink: Arc<result::Sink>, failed: Arc<AtomicBool>, debug: bool) -> ScanWorker {
     ScanWorker {
@@ -29,26 +27,18 @@ fn count_batch(
     scanner: &mut ScanWorker,
     shared: &Shared,
     paths: Vec<PathBuf>,
-    #[cfg(feature = "debug")] counting_time: &mut Duration,
+    metrics: &mut WorkerStats<'_>,
 ) {
     let _span = trace_span!("count_batch", None);
-    trace_event!(
-        "file_batch_start",
-        None,
-        serde_json::json!({"files": paths.len()})
-    );
-    #[cfg(feature = "debug")]
-    let started = shared.metrics.as_ref().map(|_| Instant::now());
+    trace_event!(file_batch_start, None, paths.len());
+    let timer = metrics.counting();
     let count = paths.len();
     for path in paths {
         scanner.visit_path(&path);
     }
     shared.pending_files.fetch_sub(count, Ordering::AcqRel);
-    #[cfg(feature = "debug")]
-    if let Some(started) = started {
-        *counting_time += started.elapsed();
-    }
-    trace_event!("file_batch_done", None, serde_json::json!({"files": count}));
+    drop(timer);
+    trace_event!(file_batch_done, None, count);
 }
 
 pub(super) fn run_single(
@@ -61,92 +51,40 @@ pub(super) fn run_single(
     batch_size: usize,
 ) {
     let _span = trace_span!("worker_lifetime", None);
-    trace_event!("worker_start", None, serde_json::json!({}));
+    trace_event!(worker_start, None);
     let mut scanner = new_scanner(sink, Arc::clone(&failed), debug);
-    #[cfg(feature = "debug")]
-    let mut counting_time = Duration::ZERO;
-    #[cfg(feature = "debug")]
-    let mut listing_time = Duration::ZERO;
-    #[cfg(feature = "debug")]
-    let mut idle_yields = 0;
+    let mut metrics = shared.metrics.worker();
     while !shared.done() {
         let mut worked = false;
         if let Some(paths) = shared.files.pop() {
-            trace_event!(
-                "file_batch_pop",
-                None,
-                serde_json::json!({"files": paths.len(), "ring_depth": shared.files.len()})
-            );
-            count_batch(
-                &mut scanner,
-                shared,
-                paths,
-                #[cfg(feature = "debug")]
-                &mut counting_time,
-            );
+            trace_event!(file_batch_pop, None, paths.len(), shared.files.len());
+            count_batch(&mut scanner, shared, paths, &mut metrics);
             worked = true;
         }
         if let Some(job) = shared.directories.pop() {
-            trace_event!(
-                "directory_pop",
-                Some(&job.path),
-                serde_json::json!({"ring_depth": shared.directories.len()})
-            );
-            #[cfg(feature = "debug")]
-            let started = shared.metrics.as_ref().map(|_| Instant::now());
-            list_directory(job, shared, batch_size, &global, ignore_git, &failed);
-            #[cfg(feature = "debug")]
-            if let Some(started) = started {
-                listing_time += started.elapsed();
+            trace_event!(directory_pop, Some(&job.path), shared.directories.len());
+            {
+                let _timer = metrics.listing();
+                list_directory(job, shared, batch_size, &global, ignore_git, &failed);
             }
             shared.pending_directories.fetch_sub(1, Ordering::AcqRel);
             worked = true;
         } else if let Some(paths) = shared.files.pop() {
-            trace_event!(
-                "file_batch_pop",
-                None,
-                serde_json::json!({"files": paths.len(), "ring_depth": shared.files.len()})
-            );
-            count_batch(
-                &mut scanner,
-                shared,
-                paths,
-                #[cfg(feature = "debug")]
-                &mut counting_time,
-            );
+            trace_event!(file_batch_pop, None, paths.len(), shared.files.len());
+            count_batch(&mut scanner, shared, paths, &mut metrics);
             worked = true;
         }
         if !worked {
             trace_event!(
-                "worker_yield",
+                worker_yield,
                 None,
-                serde_json::json!({"directories_pending": shared.pending_directories.load(Ordering::Relaxed), "files_pending": shared.pending_files.load(Ordering::Relaxed)})
+                shared.pending_directories.load(Ordering::Relaxed),
+                shared.pending_files.load(Ordering::Relaxed)
             );
-            #[cfg(feature = "debug")]
-            if shared.metrics.is_some() {
-                idle_yields += 1;
-            }
+            metrics.yielded();
             thread::yield_now();
         }
     }
-    #[cfg(feature = "debug")]
-    if let Some(metrics) = &shared.metrics {
-        metrics
-            .counting_nanos
-            .fetch_add(counting_time.as_nanos() as u64, Ordering::Relaxed);
-        metrics
-            .listing_nanos
-            .fetch_add(listing_time.as_nanos() as u64, Ordering::Relaxed);
-        metrics
-            .idle_yields
-            .fetch_add(idle_yields, Ordering::Relaxed);
-    }
-    #[cfg(feature = "debug")]
-    trace_event!(
-        "worker_exit",
-        None,
-        serde_json::json!({"idle_yields": idle_yields})
-    );
 }
 
 fn spawn_worker(
@@ -176,21 +114,13 @@ pub(super) fn run_shared(
     max_workers: usize,
     adaptive_threads: bool,
 ) -> usize {
-    trace_event!(
-        "worker_spawn",
-        None,
-        serde_json::json!({"number": 1, "reason": "initial"})
-    );
+    trace_event!(worker_spawn, None, 1, "initial");
     let mut workers = vec![spawn_worker(
         shared, &sink, &failed, &global, ignore_git, debug, batch_size,
     )];
     if !adaptive_threads {
         while workers.len() < max_workers {
-            trace_event!(
-                "worker_spawn",
-                None,
-                serde_json::json!({"number": workers.len() + 1, "reason": "explicit_threads"})
-            );
+            trace_event!(worker_spawn, None, workers.len() + 1, "explicit_threads");
             workers.push(spawn_worker(
                 shared, &sink, &failed, &global, ignore_git, debug, batch_size,
             ));
@@ -198,16 +128,14 @@ pub(super) fn run_shared(
     }
     while !shared.done() {
         let queued = shared.directories.len() + shared.files.len();
-        trace_event!(
-            "controller_tick",
-            None,
-            serde_json::json!({"queued": queued, "workers": workers.len()})
-        );
+        trace_event!(controller_tick, None, queued, workers.len());
         if workers.len() < max_workers && queued > workers.len() {
             trace_event!(
-                "worker_spawn",
+                worker_spawn_detail,
                 None,
-                serde_json::json!({"number": workers.len() + 1, "reason": "queue_pressure", "queued": queued})
+                workers.len() + 1,
+                "queue_pressure",
+                queued
             );
             workers.push(spawn_worker(
                 shared, &sink, &failed, &global, ignore_git, debug, batch_size,

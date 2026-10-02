@@ -66,8 +66,7 @@ pub(super) fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> i
             for newline in memchr_iter(b'\n', buffer) {
                 let end = newline + 1;
                 let line = &buffer[start..end];
-                #[cfg(feature = "debug")]
-                let before = (stats.code, stats.comments, stats.blanks);
+                let _line = trace_value!(stats);
 
                 if let Some(mut state) = long_line.take() {
                     state.push(line, &mut block_comment);
@@ -99,15 +98,7 @@ pub(super) fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> i
                     state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
                     partial_line.clear();
                 }
-                #[cfg(feature = "debug")]
-                trace_event!(
-                    "line_classified",
-                    None,
-                    serde_json::json!({
-                        "line": stats.lines,
-                        "class": if stats.code > before.0 { "code" } else if stats.comments > before.1 { "comment" } else { "blank" }
-                    })
-                );
+                trace_event!(line_classified, None, _line, &stats);
 
                 start = end;
                 if next_block.is_some_and(|at| at < end) {
@@ -138,8 +129,7 @@ pub(super) fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> i
         reader.consume(consumed);
     }
 
-    #[cfg(feature = "debug")]
-    let before = (stats.code, stats.comments, stats.blanks);
+    let _line = trace_value!(stats);
     if let Some(state) = long_line {
         state.finish(&mut block_comment, &mut multiline_quote, &mut stats);
     } else if !partial_line.is_empty() {
@@ -152,17 +142,7 @@ pub(super) fn count_lines(mut reader: impl BufRead, language: &LanguageDef) -> i
             true,
         );
     }
-    #[cfg(feature = "debug")]
-    if stats.lines > before.0 + before.1 + before.2 {
-        trace_event!(
-            "line_classified",
-            None,
-            serde_json::json!({
-                "line": stats.lines,
-                "class": if stats.code > before.0 { "code" } else if stats.comments > before.1 { "comment" } else { "blank" }
-            })
-        );
-    }
+    trace_event!(line_classified, None, _line, &stats);
 
     Ok(stats)
 }
@@ -186,11 +166,7 @@ fn count_plain_lines(mut reader: impl BufRead) -> io::Result<Stats> {
             for end in memchr_iter(b'\n', buffer) {
                 line_has_code |= contains_non_whitespace(&buffer[start..end]);
                 stats.lines += 1;
-                trace_event!(
-                    "line_classified",
-                    None,
-                    serde_json::json!({"line": stats.lines, "class": if line_has_code {"code"} else {"blank"}})
-                );
+                trace_event!(plain_line_classified, None, stats.lines, line_has_code);
                 if line_has_code {
                     stats.code += 1;
                 } else {
@@ -213,11 +189,7 @@ fn count_plain_lines(mut reader: impl BufRead) -> io::Result<Stats> {
 
     if line_pending {
         stats.lines += 1;
-        trace_event!(
-            "line_classified",
-            None,
-            serde_json::json!({"line": stats.lines, "class": if line_has_code {"code"} else {"blank"}})
-        );
+        trace_event!(plain_line_classified, None, stats.lines, line_has_code);
         if line_has_code {
             stats.code += 1;
         } else {
