@@ -272,11 +272,23 @@ impl Repository {
                 ));
             }
             let index = self.index()?;
+            let mut add_indexed_file = |path: PathBuf, id: BlobId, skip_worktree: bool| {
+                let present = skip_worktree
+                    && self
+                        .workdir
+                        .as_ref()
+                        .is_some_and(|workdir| workdir.join(&path).symlink_metadata().is_ok());
+                let versions = files.entry(path).or_default();
+                versions.indexed = !skip_worktree || present;
+                if skip_worktree && !present {
+                    versions.new = Some(id);
+                }
+            };
             for entry in index.entries() {
                 if entry.mode.is_sparse() {
                     let path = path_from_bytes(entry.path(&index).as_ref());
                     self.walk_tree(entry.id, &path, &include, &mut |path, id| {
-                        files.entry(path).or_default().new = Some(id);
+                        add_indexed_file(path, id, true);
                     })?;
                     continue;
                 }
@@ -286,21 +298,11 @@ impl Repository {
                 let path = path_from_bytes(entry.path(&index).as_ref());
                 if let Ok(relative) = path.strip_prefix(&self.prefix) {
                     if include(relative) {
-                        let skip_worktree =
-                            entry.flags.contains(gix_index::entry::Flags::SKIP_WORKTREE);
-                        let present = skip_worktree
-                            && self.workdir.as_ref().is_some_and(|workdir| {
-                                workdir.join(&path).symlink_metadata().is_ok()
-                            });
-                        let versions = files.entry(path).or_default();
-                        if skip_worktree {
-                            versions.indexed = present;
-                            if !present {
-                                versions.new = Some(BlobId(entry.id));
-                            }
-                        } else {
-                            versions.indexed = true;
-                        }
+                        add_indexed_file(
+                            path,
+                            BlobId(entry.id),
+                            entry.flags.contains(gix_index::entry::Flags::SKIP_WORKTREE),
+                        );
                     }
                 }
             }
@@ -321,12 +323,19 @@ impl Repository {
         let index = self.index()?;
         let mut files = Vec::new();
         let mut seen = HashSet::new();
-        for entry in index.entries() {
-            let path = path_from_bytes(entry.path(&index).as_ref());
+        let mut add = |path: PathBuf| {
             if let Ok(relative) = path.strip_prefix(&self.prefix) {
                 if seen.insert(relative.to_path_buf()) {
                     files.push(relative.to_path_buf());
                 }
+            }
+        };
+        for entry in index.entries() {
+            let path = path_from_bytes(entry.path(&index).as_ref());
+            if entry.mode.is_sparse() {
+                self.walk_tree(entry.id, &path, &|_| true, &mut |path, _| add(path))?;
+            } else {
+                add(path);
             }
         }
         Ok(files)
