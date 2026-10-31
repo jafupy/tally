@@ -1154,6 +1154,8 @@ dependencies = [
  "gix-index",
  "gix-object",
  "gix-odb",
+ "gix-quote",
+ "tempfile",
 ]
 
 [[package]]
