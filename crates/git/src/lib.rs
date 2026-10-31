@@ -251,8 +251,10 @@ impl Repository {
             self.tree_for(reference)?,
             Path::new(""),
             &include,
-            &mut |path, id| {
-                files.entry(path).or_default().old = Some(id);
+            &mut |path, id, mode| {
+                if mode.is_blob() {
+                    files.entry(path).or_default().old = Some(id);
+                }
             },
         )?;
         if let Some(target) = target {
@@ -260,8 +262,10 @@ impl Repository {
                 self.tree_for(target)?,
                 Path::new(""),
                 &include,
-                &mut |path, id| {
-                    files.entry(path).or_default().new = Some(id);
+                &mut |path, id, mode| {
+                    if mode.is_blob() {
+                        files.entry(path).or_default().new = Some(id);
+                    }
                 },
             )?;
         } else {
@@ -272,23 +276,24 @@ impl Repository {
                 ));
             }
             let index = self.index()?;
-            let mut add_indexed_file = |path: PathBuf, id: BlobId, skip_worktree: bool| {
-                let present = skip_worktree
-                    && self
-                        .workdir
-                        .as_ref()
-                        .is_some_and(|workdir| workdir.join(&path).symlink_metadata().is_ok());
-                let versions = files.entry(path).or_default();
-                versions.indexed = !skip_worktree || present;
-                if skip_worktree && !present {
-                    versions.new = Some(id);
-                }
-            };
+            let mut add_indexed_file =
+                |path: PathBuf, id: BlobId, skip_worktree: bool, is_file: bool| {
+                    let present = skip_worktree
+                        && self
+                            .workdir
+                            .as_ref()
+                            .is_some_and(|workdir| workdir.join(&path).symlink_metadata().is_ok());
+                    let versions = files.entry(path).or_default();
+                    versions.indexed = !skip_worktree || present;
+                    if skip_worktree && !present && is_file {
+                        versions.new = Some(id);
+                    }
+                };
             for entry in index.entries() {
                 if entry.mode.is_sparse() {
                     let path = path_from_bytes(entry.path(&index).as_ref());
-                    self.walk_tree(entry.id, &path, &include, &mut |path, id| {
-                        add_indexed_file(path, id, true);
+                    self.walk_tree(entry.id, &path, &include, &mut |path, id, mode| {
+                        add_indexed_file(path, id, true, mode.is_blob());
                     })?;
                     continue;
                 }
@@ -302,6 +307,7 @@ impl Repository {
                             path,
                             BlobId(entry.id),
                             entry.flags.contains(gix_index::entry::Flags::SKIP_WORKTREE),
+                            entry.mode.bits() & 0o170000 == 0o100000,
                         );
                     }
                 }
@@ -333,7 +339,7 @@ impl Repository {
         for entry in index.entries() {
             let path = path_from_bytes(entry.path(&index).as_ref());
             if entry.mode.is_sparse() {
-                self.walk_tree(entry.id, &path, &|_| true, &mut |path, _| add(path))?;
+                self.walk_tree(entry.id, &path, &|_| true, &mut |path, _, _| add(path))?;
             } else {
                 add(path);
             }
@@ -565,7 +571,7 @@ impl Repository {
         id: gix_hash::ObjectId,
         parent: &Path,
         include: &impl Fn(&Path) -> bool,
-        add: &mut impl FnMut(PathBuf, BlobId),
+        add: &mut impl FnMut(PathBuf, BlobId, gix_object::tree::EntryMode),
     ) -> io::Result<()> {
         let (kind, data) = self.object(id)?;
         if kind != Kind::Tree {
@@ -579,10 +585,10 @@ impl Repository {
             let path = parent.join(path_from_bytes(entry.filename.as_ref()));
             if entry.mode.is_tree() {
                 self.walk_tree(entry.oid.to_owned(), &path, include, add)?;
-            } else if entry.mode.is_blob() {
+            } else if entry.mode.is_blob_or_symlink() {
                 if let Ok(relative) = path.strip_prefix(&self.prefix) {
                     if include(relative) {
-                        add(path, BlobId(entry.oid.to_owned()));
+                        add(path, BlobId(entry.oid.to_owned()), entry.mode);
                     }
                 }
             }
