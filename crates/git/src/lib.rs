@@ -272,6 +272,12 @@ impl Repository {
                 ));
             }
             let index = self.index()?;
+            // With symlinks disabled, regular files contain link text instead of source.
+            let symlinks_enabled = !index
+                .entries()
+                .iter()
+                .any(|entry| entry.mode == gix_index::entry::Mode::SYMLINK)
+                || self.symlinks_enabled()?;
             for entry in index.entries() {
                 if entry.mode.is_sparse() {
                     let path = path_from_bytes(entry.path(&index).as_ref());
@@ -282,7 +288,8 @@ impl Repository {
                 }
                 // Symlink paths may have regular-file replacements in the working tree.
                 let is_file = entry.mode.bits() & 0o170000 == 0o100000;
-                if !is_file && entry.mode != gix_index::entry::Mode::SYMLINK {
+                if !is_file && (entry.mode != gix_index::entry::Mode::SYMLINK || !symlinks_enabled)
+                {
                     continue;
                 }
                 let path = path_from_bytes(entry.path(&index).as_ref());
@@ -345,6 +352,26 @@ impl Repository {
             .unwrap_or_else(|| self.gitdir.join("index"));
         gix_index::File::at(path, self.hash, true, gix_index::decode::Options::default())
             .map_err(git_error)
+    }
+    fn symlinks_enabled(&self) -> io::Result<bool> {
+        // Git's effective setting includes global, included, and worktree config.
+        let output = std::process::Command::new("git")
+            .arg("--git-dir")
+            .arg(&self.gitdir)
+            .args([
+                "config",
+                "--type=bool",
+                "--default=true",
+                "--get",
+                "core.symlinks",
+            ])
+            .output()?;
+        if !output.status.success() {
+            return Err(io::Error::other(
+                String::from_utf8_lossy(&output.stderr).into_owned(),
+            ));
+        }
+        Ok(output.stdout.trim_ascii() != b"false")
     }
     fn tree_for(&self, name: &str) -> io::Result<gix_hash::ObjectId> {
         let mut id = self.revision(name)?;
