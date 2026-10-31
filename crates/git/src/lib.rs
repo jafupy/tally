@@ -280,7 +280,9 @@ impl Repository {
                     })?;
                     continue;
                 }
-                if entry.mode.bits() & 0o170000 != 0o100000 {
+                // Symlink paths may have regular-file replacements in the working tree.
+                let is_file = entry.mode.bits() & 0o170000 == 0o100000;
+                if !is_file && entry.mode != gix_index::entry::Mode::SYMLINK {
                     continue;
                 }
                 let path = path_from_bytes(entry.path(&index).as_ref());
@@ -295,7 +297,7 @@ impl Repository {
                         let versions = files.entry(path).or_default();
                         if skip_worktree {
                             versions.indexed = present;
-                            if !present {
+                            if !present && is_file {
                                 versions.new = Some(BlobId(entry.id));
                             }
                         } else {
