@@ -506,7 +506,8 @@ impl Repository {
             return Ok(Some(*id));
         }
         for base in [&self.gitdir, &self.common] {
-            match fs::read_to_string(base.join(reference)) {
+            let path = base.join(reference);
+            match fs::read_to_string(&path) {
                 Ok(value) => {
                     let value = value.trim();
                     if let Some(next) = value.strip_prefix("ref: ") {
@@ -516,11 +517,14 @@ impl Repository {
                         .map(Some)
                         .map_err(git_error);
                 }
+                // Some platforms report directory reads as permission errors.
                 Err(error)
                     if matches!(
                         error.kind(),
-                        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
-                    ) => {}
+                        io::ErrorKind::NotFound
+                            | io::ErrorKind::NotADirectory
+                            | io::ErrorKind::IsADirectory
+                    ) || path.is_dir() => {}
                 Err(error) => return Err(error),
             }
         }
