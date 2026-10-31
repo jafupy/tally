@@ -341,7 +341,7 @@ impl Repository {
         let path = std::env::var_os("GIT_INDEX_FILE")
             .map(PathBuf::from)
             .unwrap_or_else(|| self.gitdir.join("index"));
-        gix_index::File::at(path, self.hash, true, gix_index::decode::Options::default())
+        gix_index::File::at_or_default(path, self.hash, true, gix_index::decode::Options::default())
             .map_err(git_error)
     }
     fn tree_for(&self, name: &str) -> io::Result<gix_hash::ObjectId> {
