@@ -256,8 +256,10 @@ impl Repository {
             self.tree_for(reference)?,
             Path::new(""),
             &include,
-            &mut |path, id| {
-                files.entry(path).or_default().old = Some(id);
+            &mut |path, id, mode| {
+                if mode.is_blob() {
+                    files.entry(path).or_default().old = Some(id);
+                }
             },
         )?;
         if let Some(target) = target {
@@ -265,8 +267,10 @@ impl Repository {
                 self.tree_for(target)?,
                 Path::new(""),
                 &include,
-                &mut |path, id| {
-                    files.entry(path).or_default().new = Some(id);
+                &mut |path, id, mode| {
+                    if mode.is_blob() {
+                        files.entry(path).or_default().new = Some(id);
+                    }
                 },
             )?;
         } else {
@@ -278,16 +282,29 @@ impl Repository {
             }
             let index = self.index()?;
             // With symlinks disabled, regular files contain link text instead of source.
-            let symlinks_enabled = !index
-                .entries()
-                .iter()
-                .any(|entry| entry.mode == gix_index::entry::Mode::SYMLINK)
-                || self.symlinks_enabled()?;
+            let symlinks_enabled = !index.entries().iter().any(|entry| {
+                entry.mode.is_sparse() || entry.mode == gix_index::entry::Mode::SYMLINK
+            }) || self.symlinks_enabled()?;
+            let mut add_indexed_file =
+                |path: PathBuf, id: BlobId, skip_worktree: bool, is_file: bool| {
+                    let present = skip_worktree
+                        && self
+                            .workdir
+                            .as_ref()
+                            .is_some_and(|workdir| workdir.join(&path).symlink_metadata().is_ok());
+                    let versions = files.entry(path).or_default();
+                    versions.indexed = !skip_worktree || present;
+                    if skip_worktree && !present && is_file {
+                        versions.new = Some(id);
+                    }
+                };
             for entry in index.entries() {
                 if entry.mode.is_sparse() {
                     let path = path_from_bytes(entry.path(&index).as_ref());
-                    self.walk_tree(entry.id, &path, &include, &mut |path, id| {
-                        files.entry(path).or_default().new = Some(id);
+                    self.walk_tree(entry.id, &path, &include, &mut |path, id, mode| {
+                        if mode.is_blob() || symlinks_enabled {
+                            add_indexed_file(path, id, true, mode.is_blob());
+                        }
                     })?;
                     continue;
                 }
@@ -300,21 +317,12 @@ impl Repository {
                 let path = path_from_bytes(entry.path(&index).as_ref());
                 if let Ok(relative) = path.strip_prefix(&self.prefix) {
                     if include(relative) {
-                        let skip_worktree =
-                            entry.flags.contains(gix_index::entry::Flags::SKIP_WORKTREE);
-                        let present = skip_worktree
-                            && self.workdir.as_ref().is_some_and(|workdir| {
-                                workdir.join(&path).symlink_metadata().is_ok()
-                            });
-                        let versions = files.entry(path).or_default();
-                        if skip_worktree {
-                            versions.indexed = present;
-                            if !present && is_file {
-                                versions.new = Some(BlobId(entry.id));
-                            }
-                        } else {
-                            versions.indexed = true;
-                        }
+                        add_indexed_file(
+                            path,
+                            BlobId(entry.id),
+                            entry.flags.contains(gix_index::entry::Flags::SKIP_WORKTREE),
+                            is_file,
+                        );
                     }
                 }
             }
@@ -339,12 +347,19 @@ impl Repository {
         let index = self.index()?;
         let mut files = Vec::new();
         let mut seen = HashSet::new();
-        for entry in index.entries() {
-            let path = path_from_bytes(entry.path(&index).as_ref());
+        let mut add = |path: PathBuf| {
             if let Ok(relative) = path.strip_prefix(&self.prefix) {
                 if seen.insert(relative.to_path_buf()) {
                     files.push(relative.to_path_buf());
                 }
+            }
+        };
+        for entry in index.entries() {
+            let path = path_from_bytes(entry.path(&index).as_ref());
+            if entry.mode.is_sparse() {
+                self.walk_tree(entry.id, &path, &|_| true, &mut |path, _, _| add(path))?;
+            } else {
+                add(path);
             }
         }
         Ok(files)
@@ -608,7 +623,7 @@ impl Repository {
         id: gix_hash::ObjectId,
         parent: &Path,
         include: &impl Fn(&Path) -> bool,
-        add: &mut impl FnMut(PathBuf, BlobId),
+        add: &mut impl FnMut(PathBuf, BlobId, gix_object::tree::EntryMode),
     ) -> io::Result<()> {
         let (kind, data) = self.object(id)?;
         if kind != Kind::Tree {
@@ -622,10 +637,10 @@ impl Repository {
             let path = parent.join(path_from_bytes(entry.filename.as_ref()));
             if entry.mode.is_tree() {
                 self.walk_tree(entry.oid.to_owned(), &path, include, add)?;
-            } else if entry.mode.is_blob() {
+            } else if entry.mode.is_blob_or_symlink() {
                 if let Ok(relative) = path.strip_prefix(&self.prefix) {
                     if include(relative) {
-                        add(path, BlobId(entry.oid.to_owned()));
+                        add(path, BlobId(entry.oid.to_owned()), entry.mode);
                     }
                 }
             }
