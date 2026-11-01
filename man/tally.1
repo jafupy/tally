@@ -184,6 +184,9 @@ including the combined effect of staged and unstaged changes.
 With two revisions, both sides come from Git checkpoints; working-tree changes
 are excluded.
 It is not an index-only comparison.
+Working-tree contents use Git's clean conversions and attributes before diffing
+and line classification. This requires the git executable and temporary disk
+space. Checkpoint comparisons use stored blobs directly.
 Untracked files are not included; files added to the index can be included.
 Renames are treated as deletions and additions.
 .PP

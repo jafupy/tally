@@ -3,7 +3,6 @@ use ignore::overrides::Override;
 use imara_diff::{Algorithm, Diff, InternedInput};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    fs,
     io::{self, IsTerminal, Write},
     path::Path,
     sync::{
@@ -38,11 +37,11 @@ pub fn count(
         ));
     }
     let trace_output = crate::trace_output::TraceOutput::current()?;
-    let repo = tally_git::Repository::open(root)?;
+    let mut repo = tally_git::Repository::open(root)?;
     let files = repo.files(reference, target, |path| {
         !trace_output.matches_file(&root.join(path)) && crate::file_is_included(overrides, path)
     })?;
-    let changes = count_files(root, &repo, files, threads, adaptive_threads)?;
+    let changes = count_files(&repo, files, threads, adaptive_threads)?;
     let mut languages = HashMap::<&'static str, Changes>::new();
     for [added, deleted] in changes {
         if let Some((name, stats)) = added {
@@ -74,7 +73,6 @@ pub fn count(
 }
 
 fn count_files(
-    root: &Path,
     repo: &tally_git::Repository,
     files: Vec<tally_git::FilePair>,
     threads: usize,
@@ -99,11 +97,8 @@ fn count_files(
             let queue = &queue;
             let pending = &pending;
             let failed = &failed;
+            let repo = repo.clone();
             scope.spawn(move || -> io::Result<Vec<FileCounts>> {
-                let repo = tally_git::Repository::open(root).map_err(|error| {
-                    failed.store(true, Ordering::Release);
-                    error
-                })?;
                 let mut counts = Vec::new();
                 while !failed.load(Ordering::Relaxed) {
                     let job = queue.lock().unwrap().pop_front();
@@ -154,21 +149,18 @@ fn count_file(
         return Ok(None);
     }
     let old = file.old.map(|id| repo.blob(id)).transpose()?;
-    let new = file.new.map(|id| repo.blob(id)).transpose()?;
-    let working = if let Some(path) = file.working_tree.as_ref() {
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_file() => Some(fs::read(path)?),
-            _ => None,
-        }
-    } else {
-        None
-    };
+    let new = file
+        .new
+        .map(|id| {
+            if file.working_tree.is_some() {
+                repo.worktree_blob(id)
+            } else {
+                repo.blob(id)
+            }
+        })
+        .transpose()?;
     let old_bytes = old.as_ref().map(|blob| blob.content()).unwrap_or_default();
-    let new_bytes = new
-        .as_ref()
-        .map(|blob| blob.content())
-        .or(working.as_deref())
-        .unwrap_or_default();
+    let new_bytes = new.as_ref().map(|blob| blob.content()).unwrap_or_default();
     if old_bytes == new_bytes || is_binary(old_bytes) || is_binary(new_bytes) {
         return Ok(None);
     }

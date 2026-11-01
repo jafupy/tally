@@ -1,4 +1,6 @@
 //! Storage interface for Git; tally owns counting and diffing.
+mod worktree;
+
 use gix_object::{FindExt, Kind};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -8,7 +10,9 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
+#[derive(Clone)]
 pub struct Repository {
+    worktree_objects: Vec<(Arc<tempfile::TempDir>, gix_odb::HandleArc)>,
     objects: gix_odb::HandleArc,
     alternate_objects: Vec<gix_odb::HandleArc>,
     ref_snapshot: Option<Arc<HashMap<String, gix_hash::ObjectId>>>,
@@ -153,6 +157,7 @@ impl Repository {
             .transpose()?
             .unwrap_or_default();
         Ok(Self {
+            worktree_objects: Vec::new(),
             objects,
             alternate_objects,
             ref_snapshot,
@@ -241,7 +246,7 @@ impl Repository {
         Ok((kind, body[..size].to_vec()))
     }
     pub fn files(
-        &self,
+        &mut self,
         reference: &str,
         target: Option<&str>,
         include: impl Fn(&Path) -> bool,
@@ -276,6 +281,10 @@ impl Repository {
                 ));
             }
             let index = self.index()?;
+            // With symlinks disabled, regular files contain link text instead of source.
+            let symlinks_enabled = !index.entries().iter().any(|entry| {
+                entry.mode.is_sparse() || entry.mode == gix_index::entry::Mode::SYMLINK
+            }) || self.symlinks_enabled()?;
             let mut add_indexed_file =
                 |path: PathBuf, id: BlobId, skip_worktree: bool, is_file: bool| {
                     let present = skip_worktree
@@ -293,11 +302,16 @@ impl Repository {
                 if entry.mode.is_sparse() {
                     let path = path_from_bytes(entry.path(&index).as_ref());
                     self.walk_tree(entry.id, &path, &include, &mut |path, id, mode| {
-                        add_indexed_file(path, id, true, mode.is_blob());
+                        if mode.is_blob() || symlinks_enabled {
+                            add_indexed_file(path, id, true, mode.is_blob());
+                        }
                     })?;
                     continue;
                 }
-                if entry.mode.bits() & 0o170000 != 0o100000 {
+                // Symlink paths may have regular-file replacements in the working tree.
+                let is_file = entry.mode.bits() & 0o170000 == 0o100000;
+                if !is_file && (entry.mode != gix_index::entry::Mode::SYMLINK || !symlinks_enabled)
+                {
                     continue;
                 }
                 let path = path_from_bytes(entry.path(&index).as_ref());
@@ -307,13 +321,13 @@ impl Repository {
                             path,
                             BlobId(entry.id),
                             entry.flags.contains(gix_index::entry::Flags::SKIP_WORKTREE),
-                            entry.mode.bits() & 0o170000 == 0o100000,
+                            is_file,
                         );
                     }
                 }
             }
         }
-        Ok(files
+        let mut files = files
             .into_iter()
             .map(|(path, versions)| FilePair {
                 path: path.strip_prefix(&self.prefix).unwrap().to_path_buf(),
@@ -323,7 +337,11 @@ impl Repository {
                     .indexed
                     .then(|| self.workdir.as_ref().unwrap().join(path)),
             })
-            .collect())
+            .collect::<Vec<_>>();
+        if target.is_none() {
+            self.clean_worktree_files(&mut files)?;
+        }
+        Ok(files)
     }
     pub fn tracked_files(&self) -> io::Result<Vec<PathBuf>> {
         let index = self.index()?;
@@ -356,8 +374,38 @@ impl Repository {
         let path = std::env::var_os("GIT_INDEX_FILE")
             .map(PathBuf::from)
             .unwrap_or_else(|| self.gitdir.join("index"));
-        gix_index::File::at(path, self.hash, true, gix_index::decode::Options::default())
-            .map_err(git_error)
+        // Existing split indexes must still fail if their shared index is missing.
+        let index = if path.try_exists()? {
+            gix_index::File::at(path, self.hash, true, gix_index::decode::Options::default())
+        } else {
+            gix_index::File::at_or_default(
+                path,
+                self.hash,
+                true,
+                gix_index::decode::Options::default(),
+            )
+        };
+        index.map_err(git_error)
+    }
+    fn symlinks_enabled(&self) -> io::Result<bool> {
+        // Git's effective setting includes global, included, and worktree config.
+        let output = std::process::Command::new("git")
+            .arg("--git-dir")
+            .arg(&self.gitdir)
+            .args([
+                "config",
+                "--type=bool",
+                "--default=true",
+                "--get",
+                "core.symlinks",
+            ])
+            .output()?;
+        if !output.status.success() {
+            return Err(io::Error::other(
+                String::from_utf8_lossy(&output.stderr).into_owned(),
+            ));
+        }
+        Ok(output.stdout.trim_ascii() != b"false")
     }
     fn tree_for(&self, name: &str) -> io::Result<gix_hash::ObjectId> {
         let mut id = self.revision(name)?;
@@ -521,7 +569,8 @@ impl Repository {
             return Ok(Some(*id));
         }
         for base in [&self.gitdir, &self.common] {
-            match fs::read_to_string(base.join(reference)) {
+            let path = base.join(reference);
+            match fs::read_to_string(&path) {
                 Ok(value) => {
                     let value = value.trim();
                     if let Some(next) = value.strip_prefix("ref: ") {
@@ -531,11 +580,14 @@ impl Repository {
                         .map(Some)
                         .map_err(git_error);
                 }
+                // Some platforms report directory reads as permission errors.
                 Err(error)
                     if matches!(
                         error.kind(),
-                        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
-                    ) => {}
+                        io::ErrorKind::NotFound
+                            | io::ErrorKind::NotADirectory
+                            | io::ErrorKind::IsADirectory
+                    ) || path.is_dir() => {}
                 Err(error) => return Err(error),
             }
         }
