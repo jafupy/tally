@@ -1,4 +1,6 @@
 //! Storage interface for Git; tally owns counting and diffing.
+mod worktree;
+
 use gix_object::{FindExt, Kind};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -8,7 +10,9 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
+#[derive(Clone)]
 pub struct Repository {
+    worktree_objects: Vec<(Arc<tempfile::TempDir>, gix_odb::HandleArc)>,
     objects: gix_odb::HandleArc,
     alternate_objects: Vec<gix_odb::HandleArc>,
     ref_snapshot: Option<Arc<HashMap<String, gix_hash::ObjectId>>>,
@@ -153,6 +157,7 @@ impl Repository {
             .transpose()?
             .unwrap_or_default();
         Ok(Self {
+            worktree_objects: Vec::new(),
             objects,
             alternate_objects,
             ref_snapshot,
@@ -241,7 +246,7 @@ impl Repository {
         Ok((kind, body[..size].to_vec()))
     }
     pub fn files(
-        &self,
+        &mut self,
         reference: &str,
         target: Option<&str>,
         include: impl Fn(&Path) -> bool,
@@ -305,7 +310,7 @@ impl Repository {
                 }
             }
         }
-        Ok(files
+        let mut files = files
             .into_iter()
             .map(|(path, versions)| FilePair {
                 path: path.strip_prefix(&self.prefix).unwrap().to_path_buf(),
@@ -315,7 +320,11 @@ impl Repository {
                     .indexed
                     .then(|| self.workdir.as_ref().unwrap().join(path)),
             })
-            .collect())
+            .collect::<Vec<_>>();
+        if target.is_none() {
+            self.clean_worktree_files(&mut files)?;
+        }
+        Ok(files)
     }
     pub fn tracked_files(&self) -> io::Result<Vec<PathBuf>> {
         let index = self.index()?;
