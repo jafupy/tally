@@ -1,22 +1,12 @@
 mod network;
+mod prompt;
+mod release;
+
+use prompt::prompt_for_update;
+use release::{Release, parse_version};
 
 use semver::Version;
-use serde::Deserialize;
-use std::io::{self, BufRead, IsTerminal, Write};
-
-#[derive(Deserialize)]
-struct Release {
-    tag_name: String,
-    body: Option<String>,
-    assets: Vec<Asset>,
-}
-
-#[derive(Deserialize)]
-struct Asset {
-    name: String,
-    browser_download_url: String,
-    digest: Option<String>,
-}
+use std::io::{self, IsTerminal, Write};
 
 pub fn check() -> io::Result<()> {
     let current = Version::parse(env!("CARGO_PKG_VERSION")).map_err(io::Error::other)?;
@@ -50,44 +40,6 @@ pub fn check() -> io::Result<()> {
         network::install(&release)?;
     }
     Ok(())
-}
-
-fn prompt_for_update(output: &mut impl Write) -> io::Result<bool> {
-    let mut input = io::stdin().lock();
-    loop {
-        write!(output, "\nUpdate now? [Y/n] ")?;
-        output.flush()?;
-
-        let mut answer = String::new();
-        if input.read_line(&mut answer)? == 0 {
-            return Ok(false);
-        }
-        match answer.trim().to_ascii_lowercase().as_str() {
-            "" | "y" | "yes" => return Ok(true),
-            "n" | "no" => return Ok(false),
-            _ => writeln!(output, "Please answer yes or no.")?,
-        }
-    }
-}
-
-fn parse_version(tag: &str) -> io::Result<Version> {
-    let version = tag.strip_prefix('v').unwrap_or(tag);
-    let version = if version
-        .split(['-', '+'])
-        .next()
-        .unwrap_or(version)
-        .matches('.')
-        .count()
-        == 1
-    {
-        let suffix = version.find(['-', '+']).unwrap_or(version.len());
-        format!("{}.0{}", &version[..suffix], &version[suffix..])
-    } else {
-        version.to_owned()
-    };
-
-    Version::parse(&version)
-        .map_err(|error| io::Error::other(format!("invalid release tag {tag:?}: {error}")))
 }
 
 #[cfg(test)]

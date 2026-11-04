@@ -1,198 +1,31 @@
-#[cfg(feature = "debug")]
-#[macro_export]
-macro_rules! trace_event {
-    ($name:expr, $path:expr, $detail:expr) => {
-        if crate::trace::enabled() {
-            crate::trace::event($name, $path, $detail);
-        }
-    };
-}
+#[macro_use]
+mod trace_macros;
 
-#[cfg(not(feature = "debug"))]
-#[macro_export]
-macro_rules! trace_event {
-    ($($arg:tt)*) => {};
-}
-
-#[cfg(feature = "debug")]
-#[macro_export]
-macro_rules! trace_span {
-    ($name:expr, $path:expr) => {
-        crate::trace::span($name, $path)
-    };
-}
-
-#[cfg(not(feature = "debug"))]
-#[macro_export]
-macro_rules! trace_span {
-    ($($arg:tt)*) => {
-        ()
-    };
-}
-
-#[cfg(feature = "debug")]
+mod cli;
 mod debug;
 mod diff;
-mod dir;
 mod file;
 mod language;
 mod output;
+mod progress;
+mod result;
+mod scan;
 #[cfg(feature = "debug")]
 mod trace;
 mod trace_output;
 mod update;
 
-use dir::scan_directory;
-use file::{Batch, parse_file};
-use ignore::overrides::{Override, OverrideBuilder};
+use cli::Args;
+use result::{Batch, Sink};
 use std::{
     io::{self, ErrorKind, IsTerminal},
-    path::{Path, PathBuf},
-    sync::{
-        Arc,
-        mpsc::{self, Receiver},
-    },
-    time::Duration,
+    path::Path,
 };
 
-#[cfg(feature = "debug")]
-#[argue::parser(
-    name = "tally",
-    about = "Count and inspect a codebase",
-    long_about = "Diff usage: tally [path] --diff [revision] [--diff revision]\nOne revision compares with the working tree; two revisions compare with each other. The path defaults to . and the first revision to HEAD. Put an explicit path before --diff."
-)]
-#[derive(Debug)]
-struct Args {
-    /// Print the version and check GitHub for updates.
-    #[flag(short = 'V', long = "version")]
-    version: bool,
-
-    /// Include files ignored by gitignore rules.
-    #[flag(short = 'a', long = "all")]
-    all: bool,
-
-    /// Number of worker threads. Defaults to adaptive scaling for directories and 1 for a file.
-    #[option(short = 'j', long = "threads")]
-    threads: Option<usize>,
-
-    /// Print scan diagnostics (summary by default); use --debug=max for a full trace.
-    #[option(short = 'd', long = "debug", default = DebugLevel::Off, optional = "summary", equals = true, value_name = "summary|max")]
-    debug: DebugLevel,
-
-    /// Output results as JSON.
-    #[flag(long = "json")]
-    json: bool,
-
-    /// Add per-file Blank, Comment, and Code columns.
-    /// Use min, max, mean, median, sd, iqr, variance, p0..p100, or NAME=EXPR.
-    /// Bare -x selects min, max, median, and sd.
-    #[option(
-        short = 'x',
-        long = "extended",
-        optional = "default",
-        equals = true,
-        value_name = "STAT"
-    )]
-    extended: Vec<String>,
-
-    /// Compare a git revision with the working tree, or repeat to compare two revisions.
-    #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
-    diff: Vec<String>,
-
-    /// Count only files known to git.
-    #[flag(long = "tracked")]
-    tracked: bool,
-
-    /// Include paths matching this glob. May be repeated.
-    #[option(long = "include")]
-    include: Vec<String>,
-
-    /// Exclude paths matching this glob. May be repeated.
-    #[option(long = "exclude")]
-    exclude: Vec<String>,
-
-    /// Path to tally
-    #[positional(default = ".")]
-    path: PathBuf,
-}
-
-#[cfg(not(feature = "debug"))]
-#[argue::parser(
-    name = "tally",
-    about = "Count and inspect a codebase",
-    long_about = "Diff usage: tally [path] --diff [revision] [--diff revision]\nOne revision compares with the working tree; two revisions compare with each other. The path defaults to . and the first revision to HEAD. Put an explicit path before --diff."
-)]
-#[derive(Debug)]
-struct Args {
-    /// Print the version and check GitHub for updates.
-    #[flag(short = 'V', long = "version")]
-    version: bool,
-
-    /// Include files ignored by gitignore rules.
-    #[flag(short = 'a', long = "all")]
-    all: bool,
-
-    /// Number of worker threads. Defaults to adaptive scaling for directories and 1 for a file.
-    #[option(short = 'j', long = "threads")]
-    threads: Option<usize>,
-
-    /// Output results as JSON.
-    #[flag(long = "json")]
-    json: bool,
-
-    /// Add per-file Blank, Comment, and Code columns.
-    /// Use min, max, mean, median, sd, iqr, variance, p0..p100, or NAME=EXPR.
-    /// Bare -x selects min, max, median, and sd.
-    #[option(
-        short = 'x',
-        long = "extended",
-        optional = "default",
-        equals = true,
-        value_name = "STAT"
-    )]
-    extended: Vec<String>,
-
-    /// Compare a git revision with the working tree, or repeat to compare two revisions.
-    #[option(long = "diff", optional = "HEAD", equals = true, value_name = "REV")]
-    diff: Vec<String>,
-
-    /// Count only files known to git.
-    #[flag(long = "tracked")]
-    tracked: bool,
-
-    /// Include paths matching this glob. May be repeated.
-    #[option(long = "include")]
-    include: Vec<String>,
-
-    /// Exclude paths matching this glob. May be repeated.
-    #[option(long = "exclude")]
-    exclude: Vec<String>,
-
-    /// Path to tally
-    #[positional(default = ".")]
-    path: PathBuf,
-}
-
-#[cfg(feature = "debug")]
-#[argue::args]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DebugLevel {
-    Off,
-    Summary,
-    Max,
-}
-
 fn main() {
-    if let Err(error) = run() {
-        #[cfg(feature = "debug")]
-        if trace::enabled() {
-            trace_event!(
-                "run_error",
-                None,
-                serde_json::json!({"error": error.to_string()})
-            );
-            let _ = trace::finish();
-        }
+    let result = run(cli::parse());
+    let result = debug::finish(result);
+    if let Err(error) = result {
         if error.kind() == ErrorKind::BrokenPipe {
             return;
         }
@@ -201,23 +34,11 @@ fn main() {
     }
 }
 
-fn run() -> io::Result<()> {
-    run_inner()?;
-    #[cfg(feature = "debug")]
-    if trace::enabled() {
-        let path = trace::finish()?;
-        eprintln!("Trace appended to {}", path.display());
-    }
-    Ok(())
-}
-
-fn run_inner() -> io::Result<()> {
-    let args = parse_args();
+fn run(args: Args) -> io::Result<()> {
     let extended = tally_stats::parse(&args.extended)
         .map_err(|error| io::Error::new(ErrorKind::InvalidInput, error))?;
     if args.version {
-        update::check()?;
-        return Ok(());
+        return update::check();
     }
 
     let metadata = if args.path == Path::new("-") {
@@ -225,429 +46,72 @@ fn run_inner() -> io::Result<()> {
     } else {
         Some(std::fs::metadata(&args.path)?)
     };
-    let trace_output = trace_output::TraceOutput::current()?;
-    if trace_output.matches_file(&args.path) {
+    if trace_output::TraceOutput::current()?.matches_file(&args.path) {
         return Err(io::Error::new(
             ErrorKind::InvalidInput,
             format!("{} is tally's trace output", args.path.display()),
         ));
     }
-    #[cfg(feature = "debug")]
-    if args.debug == DebugLevel::Max {
-        trace::start()?;
-    }
-    trace_event!(
-        "run_start",
-        Some(&args.path),
-        serde_json::json!({"all": args.all, "json": args.json, "threads": args.threads})
-    );
+    debug::start(&args)?;
 
-    if args.path == Path::new("-") {
-        return count_stdin(&args, &extended);
-    }
-
-    let metadata = metadata.unwrap();
-    let path_is_dir = metadata.is_dir();
-    if !path_is_dir && !metadata.is_file() {
-        return Err(io::Error::new(
-            ErrorKind::InvalidInput,
-            format!("{} is not a regular file or directory", args.path.display()),
-        ));
-    }
-    let opened_file = if path_is_dir {
-        None
-    } else {
-        Some(std::fs::File::open(&args.path)?)
+    let input = match metadata {
+        Some(metadata) => {
+            let input = scan::PathScan::new(&args, metadata)?;
+            if !args.diff.is_empty() {
+                return input.diff(&args, &extended);
+            }
+            Some(input)
+        }
+        None => {
+            if args.tracked
+                || !args.diff.is_empty()
+                || !args.include.is_empty()
+                || !args.exclude.is_empty()
+            {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "git and path filters cannot be used with stdin",
+                ));
+            }
+            None
+        }
     };
-    let threads = args.threads.unwrap_or_else(|| default_threads(path_is_dir));
-    let adaptive_threads = args.threads.is_none() && path_is_dir;
-    #[cfg(feature = "debug")]
-    let debug = args.debug != DebugLevel::Off;
-    #[cfg(not(feature = "debug"))]
-    let debug = false;
-    let override_root = if path_is_dir {
-        args.path.as_path()
-    } else {
-        args.path
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."))
+
+    let sink = Sink::new_with_samples(!extended.is_empty());
+    let path_scan = input.is_some();
+    let progress = path_scan.then(|| progress::Progress::start(&sink));
+    let timer = debug::ScanTimer::start(path_scan && args.debug_enabled());
+
+    let report = match input {
+        Some(input) => input.count(&args, &sink)?,
+        None => {
+            let mut batch = Batch::with_samples(!extended.is_empty());
+            if let Some(stats) = file::parse_stdin(args.debug_enabled())? {
+                batch.add(stats);
+            }
+            sink.add_batch(&mut batch);
+            None
+        }
     };
-    let canonical_root = override_root.canonicalize()?;
-    let overrides = build_overrides(&canonical_root, &args.include, &args.exclude)?;
-    if let Some(reference) = args.diff.first() {
-        if !extended.is_empty() {
-            return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                "-x cannot be used with --diff",
-            ));
-        }
-        if args.diff.len() > 2 {
-            return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                "--diff may be specified at most twice",
-            ));
-        }
-        return diff::count(
-            &args.path,
-            reference,
-            args.diff.get(1).map(String::as_str),
-            &overrides,
-            args.json,
-            threads,
-            adaptive_threads,
-        );
+    let timing = timer.finish();
+    if path_scan {
+        trace_event!(scan_complete, Some(&args.path));
     }
-    let sink = file::Sink::new_with_samples(!extended.is_empty());
-    let progress = std::io::stderr().is_terminal().then(|| {
-        let (progress_done, done) = mpsc::channel();
-        (progress_done, show_progress(Arc::clone(&sink), done))
-    });
-
-    #[cfg(feature = "debug")]
-    let timer = debug.then(debug::Timer::start);
-    #[cfg(feature = "debug")]
-    let mut scan = None;
-    if path_is_dir && args.tracked {
-        let files = git_files(&args.path)?;
-        parse_file_list(files, &args.path, &overrides, &sink, debug)?;
-    } else if path_is_dir {
-        let report = scan_directory(
-            &canonical_root,
-            Arc::clone(&sink),
-            !args.all,
-            threads,
-            adaptive_threads,
-            debug,
-            overrides,
-        )?;
-        #[cfg(feature = "debug")]
-        {
-            scan = Some(report);
-        }
-        #[cfg(not(feature = "debug"))]
-        {
-            let _ = report;
-        }
-    } else if !args.tracked
-        || git_files(override_root)?.iter().any(|path| {
-            path == &override_root.join(args.path.strip_prefix(override_root).unwrap_or(&args.path))
-        })
-    {
-        let relative_path = args.path.strip_prefix(override_root).unwrap_or(&args.path);
-        if std::fs::symlink_metadata(&args.path)?.file_type().is_file()
-            && file_is_included(&overrides, relative_path)
-        {
-            parse_single_opened_file(&args.path, opened_file.unwrap(), &sink, debug)?;
-        }
-    }
-    #[cfg(feature = "debug")]
-    let timing = timer.map(debug::Timer::finish);
-    trace_event!("scan_complete", Some(&args.path), serde_json::json!({}));
-
-    if let Some((progress_done, progress)) = progress {
-        let _ = progress_done.send(());
-        progress.join().unwrap();
-    }
+    drop(progress);
 
     let summary = sink.snapshot();
-    trace_event!(
-        "summary_snapshot",
-        None,
-        serde_json::json!({"files": summary.all.files, "lines": summary.all.lines})
-    );
+    if path_scan {
+        trace_event!(summary_snapshot, None, summary.all.files, summary.all.lines);
+    }
+    let _span = trace_span!("output", None);
+    let color = io::stdout().is_terminal();
     {
-        let _span = trace_span!("output", None);
+        let mut stdout = io::stdout().lock();
         if args.json {
-            output::print_json(&summary, &extended)?;
+            output::write_json(&mut stdout, &summary, &extended)?;
         } else {
-            output::print_summary(&summary, std::io::stdout().is_terminal(), &extended)?;
-        }
-
-        #[cfg(feature = "debug")]
-        if let Some(timing) = timing {
-            debug::print(timing, scan, &summary)?;
-            output::print_unknown_formats(&summary, std::io::stderr().is_terminal())?;
+            output::write_summary(&mut stdout, &summary, color, &extended)?;
         }
     }
-    Ok(())
-}
-
-fn build_overrides(root: &Path, includes: &[String], excludes: &[String]) -> io::Result<Override> {
-    let mut builder = OverrideBuilder::new(root.to_path_buf());
-    for pattern in includes {
-        builder.add(pattern).map_err(io::Error::other)?;
-    }
-    for pattern in excludes {
-        builder
-            .add(&format!("!{pattern}"))
-            .map_err(io::Error::other)?;
-    }
-    builder.build().map_err(io::Error::other)
-}
-
-fn git_files(root: &Path) -> io::Result<Vec<PathBuf>> {
-    tally_git::tracked_files(root)
-}
-
-fn parse_file_list(
-    files: Vec<PathBuf>,
-    root: &Path,
-    overrides: &Override,
-    sink: &file::Sink,
-    verbose: bool,
-) -> io::Result<()> {
-    let trace_output = trace_output::TraceOutput::current()?;
-    for path in files {
-        if trace_output.matches_file(&path) {
-            continue;
-        }
-        if std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_file())
-            && file_is_included(overrides, path.strip_prefix(root).unwrap_or(&path))
-        {
-            parse_single_file(&path, sink, verbose)?;
-        }
-    }
-    Ok(())
-}
-
-// Paths are relative to the override root. Match the same paths as the walker,
-// including directory exclusions that prevent it from reaching a file.
-fn file_is_included(overrides: &Override, relative_path: &Path) -> bool {
-    relative_path
-        .ancestors()
-        .take_while(|path| !path.as_os_str().is_empty())
-        .enumerate()
-        .all(|(depth, path)| {
-            !overrides
-                .matched(overrides.path().join(path), depth > 0)
-                .is_ignore()
-        })
-}
-
-fn count_stdin(args: &Args, extended: &[tally_stats::Kind]) -> io::Result<()> {
-    if args.tracked || !args.diff.is_empty() || !args.include.is_empty() || !args.exclude.is_empty()
-    {
-        return Err(io::Error::new(
-            ErrorKind::InvalidInput,
-            "git and path filters cannot be used with stdin",
-        ));
-    }
-    let sink = file::Sink::new_with_samples(!extended.is_empty());
-    let mut batch = Batch::with_samples(!extended.is_empty());
-    #[cfg(feature = "debug")]
-    let debug = args.debug != DebugLevel::Off;
-    #[cfg(not(feature = "debug"))]
-    let debug = false;
-    if let Some(stats) = file::parse_stdin(debug)? {
-        batch.add(stats);
-    }
-    sink.add_batch(&mut batch);
-    let summary = sink.snapshot();
-    if args.json {
-        output::print_json(&summary, extended)
-    } else {
-        output::print_summary(&summary, std::io::stdout().is_terminal(), extended)
-    }
-}
-
-fn parse_args() -> Args {
-    let mut argv = std::env::args_os().collect::<Vec<_>>();
-    if let Some(position) = argv.iter().position(|arg| arg == "-")
-        && !argv[..position].iter().any(|arg| arg == "--")
-        && (position == 1
-            || (position + 1 == argv.len()
-                && !matches!(
-                    argv.get(position.wrapping_sub(1))
-                        .and_then(|arg| arg.to_str()),
-                    Some("-j" | "--threads" | "--diff" | "--include" | "--exclude")
-                )))
-    {
-        argv.remove(position);
-        argv.push("--".into());
-        argv.push("-".into());
-    }
-    // argue's optional values only accept explicit revisions with `=`.
-    // Join space-separated revisions without touching other option values or `--`.
-    let mut position = 1;
-    while position < argv.len() {
-        if let Some(value) = argv[position]
-            .to_str()
-            .and_then(|arg| arg.strip_prefix("-x="))
-        {
-            argv[position] = format!("--extended={value}").into();
-        }
-        match argv[position].to_str() {
-            Some("--") => break,
-            Some("-j" | "--threads" | "--include" | "--exclude") => position += 2,
-            Some("--diff") => {
-                if argv.get(position + 1).is_some_and(|value| {
-                    value == "-" || !value.as_encoded_bytes().starts_with(b"-")
-                }) {
-                    let revision = argv.remove(position + 1);
-                    argv[position].push("=");
-                    argv[position].push(revision);
-                }
-                position += 1;
-            }
-            _ => position += 1,
-        }
-    }
-    match Args::parse_from(argv) {
-        Ok(args) => args,
-        Err(err) => {
-            match &err {
-                argue::Error::Help(help) => println!("{help}"),
-                _ => eprintln!("{err}"),
-            }
-            std::process::exit(err.exit_code());
-        }
-    }
-}
-
-fn default_threads(path_is_dir: bool) -> usize {
-    if !path_is_dir {
-        return 1;
-    }
-
-    std::thread::available_parallelism().map_or(1, usize::from)
-}
-
-fn parse_single_file(path: &Path, sink: &file::Sink, debug: bool) -> io::Result<()> {
-    #[cfg(feature = "debug")]
-    let _file_context = trace::file_context(path);
-    let mut batch = Batch::with_samples(sink.collects_samples());
-    if let Some(file_stats) = parse_file(path, debug)? {
-        batch.add(file_stats);
-    }
-    sink.record_progress(batch.files());
-    sink.add_batch(&mut batch);
-    Ok(())
-}
-
-fn parse_single_opened_file(
-    path: &Path,
-    opened_file: std::fs::File,
-    sink: &file::Sink,
-    debug: bool,
-) -> io::Result<()> {
-    #[cfg(feature = "debug")]
-    let _file_context = trace::file_context(path);
-    let mut batch = Batch::with_samples(sink.collects_samples());
-    if let Some(file_stats) = file::parse_opened_file(path, opened_file, debug)? {
-        batch.add(file_stats);
-    }
-    sink.record_progress(batch.files());
-    sink.add_batch(&mut batch);
-    Ok(())
-}
-
-fn show_progress(sink: Arc<file::Sink>, done: Receiver<()>) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(move || {
-        let mut last_files = None;
-
-        loop {
-            match done.recv_timeout(Duration::from_millis(250)) {
-                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    let files = sink.files();
-                    if last_files == Some(files) {
-                        continue;
-                    }
-
-                    last_files = Some(files);
-                    eprint!(
-                        "\r\x1b[36mprocessed {} files\x1b[0m",
-                        output::format_number(files)
-                    );
-                }
-            }
-        }
-
-        eprint!("\r{:<24}\r", "");
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn default_threads_uses_one_worker_for_a_file() {
-        assert_eq!(default_threads(false), 1);
-    }
-
-    #[test]
-    fn default_threads_uses_available_parallelism_for_a_directory() {
-        assert_eq!(
-            default_threads(true),
-            std::thread::available_parallelism().map_or(1, usize::from)
-        );
-    }
-
-    #[test]
-    fn args_apply_defaults() {
-        let args = Args::parse_from(["tally"]).unwrap();
-
-        assert!(!args.all);
-        #[cfg(feature = "debug")]
-        assert_eq!(args.debug, DebugLevel::Off);
-        assert!(!args.json);
-        assert!(!args.version);
-        assert!(!args.tracked);
-        assert!(args.diff.is_empty());
-        assert!(args.include.is_empty());
-        assert!(args.exclude.is_empty());
-        assert_eq!(args.threads, None);
-        assert_eq!(args.path, PathBuf::from("."));
-    }
-
-    #[test]
-    fn args_accept_repeated_filters() {
-        let args = Args::parse_from([
-            "tally",
-            "--include",
-            "*.rs",
-            "--exclude",
-            "tests/**",
-            "--exclude",
-            "*.ts",
-        ])
-        .unwrap();
-        assert_eq!(args.include, ["*.rs"]);
-        assert_eq!(args.exclude, ["tests/**", "*.ts"]);
-    }
-
-    #[cfg(feature = "debug")]
-    #[test]
-    fn args_parse_flags_options_and_path() {
-        let args = Args::parse_from(["tally", "--all", "--json", "-d", "-j", "2", "src"]).unwrap();
-
-        assert!(args.all);
-        assert_eq!(args.debug, DebugLevel::Summary);
-        assert!(args.json);
-        assert_eq!(args.threads, Some(2));
-        assert_eq!(args.path, PathBuf::from("src"));
-    }
-
-    #[test]
-    fn args_report_help() {
-        let err = Args::parse_from(["tally", "--help"]).unwrap_err();
-
-        assert_eq!(err, argue::Error::Help(Args::HELP));
-    }
-
-    #[test]
-    fn args_parse_version() {
-        let args = Args::parse_from(["tally", "--version"]).unwrap();
-
-        assert!(args.version);
-    }
-
-    #[test]
-    fn args_accept_stdin_marker() {
-        let args = Args::parse_from(["tally", "--", "-"]).unwrap();
-
-        assert_eq!(args.path, PathBuf::from("-"));
-    }
+    timing.print(report, &summary)
 }

@@ -1,22 +1,17 @@
 // Prototype: own directory crawler and growable MPMC job queues. The ignore
 // crate is used only to parse and match ignore patterns, never to walk.
-#[cfg(feature = "debug")]
 mod metrics;
 mod rules;
 mod workers;
 
 use super::{report_file_error, scan_result};
-use crate::file;
+use crate::result;
 use crate::trace_output::TraceOutput;
 use crossbeam_queue::SegQueue;
 use ignore::gitignore::Gitignore;
 use ignore::overrides::Override;
-#[cfg(feature = "debug")]
 use metrics::Counters;
-#[cfg(feature = "debug")]
 pub(crate) use metrics::ScanReport;
-#[cfg(not(feature = "debug"))]
-pub(crate) type ScanReport = ();
 use rules::{Rules, extend_rules};
 use std::fs;
 use std::io;
@@ -39,50 +34,23 @@ struct Shared {
     files: SegQueue<Vec<PathBuf>>,
     pending_directories: AtomicUsize,
     pending_files: AtomicUsize,
-    #[cfg(feature = "debug")]
-    metrics: Option<Counters>,
+    metrics: Counters,
 }
 
 impl Shared {
     fn push_directory(&self, job: DirectoryJob) {
-        trace_event!("directory_enqueue", Some(&job.path), serde_json::json!({}));
+        trace_event!(directory_enqueue, Some(&job.path));
         self.pending_directories.fetch_add(1, Ordering::AcqRel);
         self.directories.push(job);
-        #[cfg(feature = "debug")]
-        if let Some(metrics) = &self.metrics {
-            metrics
-                .peak_directory_queue
-                .fetch_max(self.directories.len(), Ordering::Relaxed);
-        }
+        self.metrics.directory_queued(self.directories.len());
     }
 
     fn push_files(&self, paths: Vec<PathBuf>) {
-        #[cfg(feature = "debug")]
-        if crate::trace::enabled() {
-            for path in &paths {
-                trace_event!("file_enqueue", Some(path), serde_json::json!({}));
-            }
-        }
-        trace_event!(
-            "file_batch_enqueue",
-            None,
-            serde_json::json!({"files": paths.len()})
-        );
+        trace_event!(files_queued, None, &paths);
         self.pending_files.fetch_add(paths.len(), Ordering::AcqRel);
-        #[cfg(feature = "debug")]
-        if let Some(metrics) = &self.metrics {
-            metrics
-                .files_queued
-                .fetch_add(paths.len(), Ordering::Relaxed);
-            metrics.file_batches.fetch_add(1, Ordering::Relaxed);
-        }
+        let count = paths.len();
         self.files.push(paths);
-        #[cfg(feature = "debug")]
-        if let Some(metrics) = &self.metrics {
-            metrics
-                .peak_file_queue
-                .fetch_max(self.files.len(), Ordering::Relaxed);
-        }
+        self.metrics.files_queued(count, self.files.len());
     }
 
     fn done(&self) -> bool {
@@ -100,11 +68,7 @@ fn list_directory(
     failed: &AtomicBool,
 ) {
     let _span = trace_span!("list_directory", Some(&job.path));
-    trace_event!(
-        "directory_rules",
-        Some(&job.path),
-        serde_json::json!({"ignore_git": ignore_git})
-    );
+    trace_event!(directory_rules, Some(&job.path), ignore_git);
     let rules = extend_rules(&job.path, job.rules, ignore_git, failed);
     let entries = match fs::read_dir(&job.path) {
         Ok(entries) => entries,
@@ -115,10 +79,7 @@ fn list_directory(
             return;
         }
     };
-    #[cfg(feature = "debug")]
-    if let Some(metrics) = &shared.metrics {
-        metrics.directories_listed.fetch_add(1, Ordering::Relaxed);
-    }
+    shared.metrics.directory_listed();
     let mut batch = Vec::new();
     for entry in entries {
         let entry = match entry {
@@ -140,34 +101,18 @@ fn list_directory(
             }
         };
         let is_dir = kind.is_dir();
-        trace_event!(
-            "entry_seen",
-            Some(&entry.path()),
-            serde_json::json!({"directory": is_dir, "file": kind.is_file()})
-        );
+        trace_event!(entry_seen, Some(&entry.path()), is_dir, kind.is_file());
         if is_dir && entry.file_name() == ".git" {
-            trace_event!(
-                "entry_skip",
-                Some(&entry.path()),
-                serde_json::json!({"reason": "git_directory"})
-            );
+            trace_event!(entry_skip, Some(&entry.path()), "git_directory");
             continue;
         }
         if !is_dir && !kind.is_file() {
-            trace_event!(
-                "entry_skip",
-                Some(&entry.path()),
-                serde_json::json!({"reason": "not_regular_file"})
-            );
+            trace_event!(entry_skip, Some(&entry.path()), "not_regular_file");
             continue;
         }
         let path = entry.path();
         if shared.trace_output.matches_entry(&path) {
-            trace_event!(
-                "entry_skip",
-                Some(&path),
-                serde_json::json!({"reason": "trace_output"})
-            );
+            trace_event!(entry_skip, Some(&path), "trace_output");
             continue;
         }
         let ignored = {
@@ -185,18 +130,10 @@ fn list_directory(
             }
         };
         if ignored {
-            trace_event!(
-                "entry_skip",
-                Some(&path),
-                serde_json::json!({"reason": "ignore_rule"})
-            );
+            trace_event!(entry_skip, Some(&path), "ignore_rule");
             continue;
         }
-        trace_event!(
-            "entry_accept",
-            Some(&path),
-            serde_json::json!({"directory": is_dir})
-        );
+        trace_event!(entry_accept, Some(&path), is_dir);
         if is_dir {
             shared.push_directory(DirectoryJob {
                 path,
@@ -219,7 +156,7 @@ pub(super) fn scan(
     ignore_git: bool,
     threads: usize,
     adaptive_threads: bool,
-    sink: Arc<file::Sink>,
+    sink: Arc<result::Sink>,
     debug: bool,
     overrides: Override,
 ) -> io::Result<ScanReport> {
@@ -229,7 +166,7 @@ pub(super) fn scan(
     } else {
         root.canonicalize()?
     };
-    trace_event!("root_canonicalized", Some(&root), serde_json::json!({}));
+    trace_event!(root_canonicalized, Some(&root));
     let failed = Arc::new(AtomicBool::new(false));
     let mut ancestor_rules = None;
     if ignore_git {
@@ -246,7 +183,7 @@ pub(super) fn scan(
     let global = if ignore_git {
         let (global, error) = Gitignore::global();
         if let Some(error) = error {
-            if crate::dir::report_walk_error(&error) {
+            if crate::scan::report_walk_error(&error) {
                 failed.store(true, Ordering::Relaxed);
             }
         }
@@ -261,10 +198,9 @@ pub(super) fn scan(
         files: SegQueue::new(),
         pending_directories: AtomicUsize::new(1),
         pending_files: AtomicUsize::new(0),
-        #[cfg(feature = "debug")]
-        metrics: debug.then(Counters::new),
+        metrics: Counters::new(debug),
     });
-    trace_event!("root_queued", Some(&root), serde_json::json!({}));
+    trace_event!(root_queued, Some(&root));
     shared.directories.push(DirectoryJob {
         path: root,
         rules: ancestor_rules,
@@ -304,17 +240,5 @@ pub(super) fn scan(
         )
     };
     scan_result(failed.load(Ordering::Relaxed))?;
-    #[cfg(not(feature = "debug"))]
-    let _ = workers;
-    #[cfg(feature = "debug")]
-    return Ok(shared.metrics.as_ref().map_or(
-        ScanReport {
-            workers,
-            worker_limit: max_workers,
-            ..ScanReport::default()
-        },
-        |metrics| metrics.snapshot(workers, max_workers),
-    ));
-    #[cfg(not(feature = "debug"))]
-    Ok(())
+    Ok(shared.metrics.snapshot(workers, max_workers))
 }

@@ -81,13 +81,25 @@ fn main() {
     )
     .expect("failed to parse data/files.toml");
 
-    let language_ids = languages
+    let language_ids = language_ids(&languages);
+    let extensions = extension_map(&languages);
+    let generated = generate(&languages, &files, &language_ids, &extensions);
+
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
+    fs::write(out_dir.join("languages.rs"), generated)
+        .expect("failed to write generated languages.rs");
+}
+
+fn language_ids(languages: &LanguagesConfig) -> BTreeMap<&str, usize> {
+    languages
         .languages
         .iter()
         .enumerate()
         .map(|(index, language)| (language.name.as_str(), index))
-        .collect::<BTreeMap<_, _>>();
+        .collect()
+}
 
+fn extension_map(languages: &LanguagesConfig) -> BTreeMap<String, Vec<usize>> {
     let mut extensions = BTreeMap::<String, Vec<usize>>::new();
     for (language_id, language) in languages.languages.iter().enumerate() {
         for extension in &language.extensions {
@@ -97,11 +109,19 @@ fn main() {
                 .push(language_id);
         }
     }
+    extensions
+}
 
+fn generate(
+    languages: &LanguagesConfig,
+    files: &FilesConfig,
+    language_ids: &BTreeMap<&str, usize>,
+    extensions: &BTreeMap<String, Vec<usize>>,
+) -> String {
     let mut generated = String::new();
     generated.push_str("pub fn language_named(name: &str) -> Option<LanguageId> {\n");
     generated.push_str("    match name {\n");
-    for (name, language_id) in &language_ids {
+    for (name, language_id) in language_ids {
         generated.push_str(&format!(
             "        {:?} => Some(LanguageId({})),\n",
             name, language_id
@@ -248,7 +268,7 @@ fn main() {
     generated.push_str("}\n\n");
 
     generated.push_str("pub const EXTENSION_LANGUAGES: &[(&str, &[LanguageId])] = &[\n");
-    for (extension, language_ids) in &extensions {
+    for (extension, language_ids) in extensions {
         generated.push_str(&format!("    ({extension:?}, &["));
         for language_id in language_ids {
             generated.push_str(&format!("LanguageId({language_id}),"));
@@ -259,7 +279,7 @@ fn main() {
 
     generated.push_str("pub fn extension_languages(extension: &str) -> &'static [LanguageId] {\n");
     generated.push_str("    match extension {\n");
-    for (extension, language_ids) in &extensions {
+    for (extension, language_ids) in extensions {
         generated.push_str(&format!("        {extension:?} => &["));
         for language_id in language_ids {
             generated.push_str(&format!("LanguageId({language_id}),"));
@@ -273,9 +293,7 @@ fn main() {
     generated.push_str("    }\n");
     generated.push_str("}\n");
 
-    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
-    fs::write(out_dir.join("languages.rs"), generated)
-        .expect("failed to write generated languages.rs");
+    generated
 }
 
 fn load_languages() -> LanguagesConfig {
